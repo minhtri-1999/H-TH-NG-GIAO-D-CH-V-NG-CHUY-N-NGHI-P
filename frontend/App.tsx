@@ -1012,6 +1012,7 @@ export default function App() {
       const resp = await fetch(`/api/signals/XAUUSD?tf=${timeframe}`);
       if (!resp.ok) throw new Error("Không thể kết nối đến server API Gold");
       const resData: GoldSignalResponse = await resp.json();
+      setError(null); // Clear connection error upon success
       setData(resData);
       setLastUpdatedPA(new Date().toLocaleTimeString("vi-VN"));
 
