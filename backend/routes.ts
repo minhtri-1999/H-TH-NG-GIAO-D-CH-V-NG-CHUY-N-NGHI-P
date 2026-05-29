@@ -274,9 +274,23 @@ api.post("/auth/resend-otp", async (c) => {
   }
 });
 
-// ==========================================
-// 📊 EXISTING CHART & TRADING DATA ENDPOINTS
-// ==========================================
+api.get("/test-coinbase", async (c) => {
+  try {
+    const url = "https://api.exchange.coinbase.com/products/PAXG-USD/candles?granularity=300";
+    const resp = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+      }
+    });
+    return c.json({
+      status: resp.status,
+      statusText: resp.statusText,
+      text: (await resp.text()).slice(0, 500)
+    });
+  } catch (e: any) {
+    return c.json({ error: e.message, stack: e.stack });
+  }
+});
 
 // Search symbols - returns XAU/USD exclusively
 api.get("/search", (c) => {
