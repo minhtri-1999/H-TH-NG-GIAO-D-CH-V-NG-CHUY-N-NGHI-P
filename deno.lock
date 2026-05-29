@@ -1,7 +1,9 @@
 {
   "version": "5",
   "specifiers": {
-    "npm:esbuild@0.20.2": "0.20.2"
+    "npm:esbuild@0.20.2": "0.20.2",
+    "npm:hono@4": "4.12.21",
+    "npm:nodemailer@*": "8.0.7"
   },
   "npm": {
     "@esbuild/aix-ppc64@0.20.2": {
@@ -148,6 +150,12 @@
       ],
       "scripts": true,
       "bin": true
+    },
+    "hono@4.12.21": {
+      "integrity": "sha512-uV63apnb0kyPtAUwoWgaGh9HyIFcv8lgmzPZSiTBQAFOFGIzka5EZ1dZocmGnn0XdX0+XTqJ6Tqv7selMuGLRQ=="
+    },
+    "nodemailer@8.0.7": {
+      "integrity": "sha512-pkjE4mkBzQjdJT4/UmlKl3pX0rC9fZmjh7c6C9o7lv66Ac6w9WCnzPzhbPNxwZAzlF4mdq4CSWB5+FbK6FWCow=="
     }
   }
 }

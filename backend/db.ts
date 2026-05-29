@@ -19,8 +19,54 @@ export interface Session {
   expiresAt: number;
 }
 
-// Open Deno KV (automatically handles sqlite local store in dev and managed store in deploy)
-export const kv = await Deno.openKv();
+// Open Deno KV with a robust fallback to an in-memory database if KV is not supported or unstable flag is missing
+let tempKv: any;
+try {
+  if (typeof (Deno as any).openKv === "function") {
+    tempKv = await (Deno as any).openKv();
+  } else {
+    throw new Error("Deno.openKv is not a function in this environment.");
+  }
+} catch (e) {
+  console.warn("⚠️ Deno KV is not supported or enabled in this environment. Falling back to in-memory database.", e);
+  
+  // High-performance Mock KV storage for sandboxes, playgrounds, or non-KV deployments
+  const store = new Map<string, any>();
+  tempKv = {
+    async get(key: unknown[]) {
+      const k = JSON.stringify(key);
+      return { value: store.get(k) ?? null };
+    },
+    async set(key: unknown[], value: any, options?: any) {
+      const k = JSON.stringify(key);
+      store.set(k, value);
+      return { ok: true };
+    },
+    async delete(key: unknown[]) {
+      const k = JSON.stringify(key);
+      store.delete(k);
+      return { ok: true };
+    },
+    list(selector: { prefix: unknown[] }) {
+      const prefixStr = JSON.stringify(selector.prefix).slice(0, -1);
+      const results: any[] = [];
+      for (const [k, v] of store.entries()) {
+        if (k.startsWith(prefixStr)) {
+          results.push({ key: JSON.parse(k), value: v });
+        }
+      }
+      return {
+        async *[Symbol.asyncIterator]() {
+          for (const r of results) {
+            yield r;
+          }
+        }
+      };
+    }
+  };
+}
+
+export const kv = tempKv;
 
 // Securely generate cryptographically strong salt
 export function generateSalt(): string {
