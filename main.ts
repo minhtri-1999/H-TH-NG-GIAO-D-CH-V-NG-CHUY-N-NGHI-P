@@ -20,7 +20,7 @@ app.use("/api/*", async (c, next) => {
   const path = c.req.path;
   
   // Public auth paths do NOT require authentication check
-  if (path.startsWith("/api/auth/")) {
+  if (path.startsWith("/api/auth/") || path === "/api/test-coinbase") {
     return await next();
   }
 
