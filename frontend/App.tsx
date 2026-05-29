@@ -1962,7 +1962,36 @@ export default function App() {
           {/* CHART & HIGH FREQUENCY WORKSPACE */}
           <div className="main-workspace">
             <div className={`chart-column ${fullChart ? "full-chart-active" : ""}`}>
-              <div className="chart-wrap" style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column" }}>
+              <div className="chart-wrap" style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", position: "relative" }}>
+                {/* Floating Full Chart Toggle Button */}
+                <button
+                  onClick={() => { playSound(); setFullChart(prev => !prev); }}
+                  style={{
+                    position: "absolute",
+                    bottom: "16px",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    zIndex: 99,
+                    background: fullChart ? "rgba(0, 230, 118, 0.9)" : "rgba(21, 26, 38, 0.85)",
+                    backdropFilter: "blur(12px)",
+                    border: `1.5px solid ${fullChart ? "var(--green)" : "rgba(255,255,255,0.15)"}`,
+                    color: fullChart ? "#000" : "#fff",
+                    padding: "8px 18px",
+                    borderRadius: "20px",
+                    fontSize: "11px",
+                    fontWeight: "bold",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    boxShadow: "0 6px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15)",
+                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px"
+                  }}
+                >
+                  🖥️ {fullChart ? "HỦY FULL CHART" : "FULL CHART"}
+                </button>
                 {chartType === "tradingview" ? (
                   <>
                     <TradingViewWidget timeframe={timeframe} />
