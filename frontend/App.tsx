@@ -219,6 +219,7 @@ function TradingViewWidget({ timeframe }: { timeframe: string }) {
 export default function App() {
   const [timeframe, setTimeframe] = useState<string>("5");
   const [chartType, setChartType] = useState<"deno" | "tradingview">("tradingview");
+  const [fullChart, setFullChart] = useState<boolean>(false);
   const [data, setData] = useState<GoldSignalResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -1675,6 +1676,7 @@ export default function App() {
 
       <div className="layout">
         {/* SIDEBAR */}
+        {!fullChart && (
         <aside className="sidebar">
           <div className="sb-header">
             <div className="gold-profile-card">
@@ -1842,6 +1844,7 @@ export default function App() {
             )}
           </div>
         </aside>
+        )}
 
         {/* MAIN TERMINAL PANEL */}
         <main className="main">
@@ -1928,6 +1931,23 @@ export default function App() {
               >
                 ⚡ BIỂU ĐỒ CẤU TRÚC SMC
               </button>
+              <button
+                onClick={() => { playSound(); setFullChart(prev => !prev); }}
+                className={`tf-btn ${fullChart ? "active" : ""}`}
+                style={{
+                  background: fullChart ? "var(--green)" : "var(--bg3)",
+                  borderColor: fullChart ? "var(--green)" : "rgba(255,255,255,0.05)",
+                  color: fullChart ? "#000" : "var(--text)",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  fontSize: "11px",
+                  padding: "5px 12px",
+                  borderRadius: "4px",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                🖥️ {fullChart ? "HỦY FULL CHART" : "FULL CHART"}
+              </button>
             </div>
           </div>
 
@@ -1941,7 +1961,7 @@ export default function App() {
 
           {/* CHART & HIGH FREQUENCY WORKSPACE */}
           <div className="main-workspace">
-            <div className="chart-column">
+            <div className={`chart-column ${fullChart ? "full-chart-active" : ""}`}>
               <div className="chart-wrap" style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column" }}>
                 {chartType === "tradingview" ? (
                   <>
@@ -2753,6 +2773,7 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
             </div>
 
             {/* REAL-TIME ECONOMIC CALENDAR WIDGET */}
+            {!fullChart && (
             <div className="realtime-panel" style={{ height: "100%" }}>
               <div className="panel-tab" style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "10px", background: "var(--bg3)", borderBottom: "1px solid var(--border)" }}>
                 <span style={{ fontSize: "11.5px", fontWeight: "700", color: "var(--gold)", letterSpacing: "0.5px" }}>
@@ -2776,11 +2797,12 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                 ></iframe>
               </div>
             </div>
+            )}
 
           </div>
 
           {/* TECHNICAL DOCK & DETAILED PROBABILITY */}
-          {data && (
+          {data && !fullChart && (
             <div className="signal-dash">
               {/* Premium Workspace Tab Menu */}
               <div className="dash-tabs">

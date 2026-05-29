@@ -914,6 +914,10 @@ body {
     overflow: hidden !important;
     flex-shrink: 0 !important;
   }
+  .chart-column.full-chart-active {
+    height: 70vh !important; /* Stretch to fill 70% of viewport height in Full Chart mode */
+    min-height: 500px !important;
+  }
   .chart-wrap {
     height: 100% !important;
     overflow: hidden !important;
