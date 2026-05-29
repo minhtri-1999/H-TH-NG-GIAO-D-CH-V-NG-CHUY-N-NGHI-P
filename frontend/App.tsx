@@ -223,12 +223,32 @@ export default function App() {
   const [data, setData] = useState<GoldSignalResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [dashTab, setDashTab] = useState<"general" | "ai" | "backtest" | "outlook">("general");
+  const [dashTab, _setDashTab] = useState<"general" | "ai" | "backtest" | "outlook">(() => {
+    const saved = localStorage.getItem("active_dash_tab");
+    if (saved === "general" || saved === "ai" || saved === "backtest" || saved === "outlook") {
+      return saved as any;
+    }
+    return "general";
+  });
+  const setDashTab = (tab: "general" | "ai" | "backtest" | "outlook") => {
+    _setDashTab(tab);
+    localStorage.setItem("active_dash_tab", tab);
+  };
+
   const [closedTrades, setClosedTrades] = useState<any[]>([]);
   const [backtestLoading, setBacktestLoading] = useState<boolean>(false);
-  const [backtestFilter, setBacktestFilter] = useState<string>("ALL");
 
-  const [selectedDay, setSelectedDay] = useState<string>("TODAY");
+  const [backtestFilter, _setBacktestFilter] = useState<string>(() => localStorage.getItem("backtest_timeframe_filter") || "ALL");
+  const setBacktestFilter = (tf: string) => {
+    _setBacktestFilter(tf);
+    localStorage.setItem("backtest_timeframe_filter", tf);
+  };
+
+  const [selectedDay, _setSelectedDay] = useState<string>(() => localStorage.getItem("backtest_selected_day") || "ALL");
+  const setSelectedDay = (day: string) => {
+    _setSelectedDay(day);
+    localStorage.setItem("backtest_selected_day", day);
+  };
 
   const filteredClosedTrades = useMemo(() => {
     let trades = [...closedTrades].sort((a, b) => b.closeTime - a.closeTime);
@@ -380,6 +400,13 @@ export default function App() {
   useEffect(() => {
     checkSession();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      // Pre-fetch closed trades immediately as soon as user is authenticated
+      fetchBacktestHistory(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (user && (dashTab === "ai" || dashTab === "backtest")) {
@@ -3543,22 +3570,22 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                       gap: "16px",
                       marginTop: "4px"
                     }}>
-                      <div style={{ background: "rgba(255,255,255,0.02)", padding: "16px", borderRadius: "8px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "4px" }}>
+                       <div style={{ background: "rgba(255,255,255,0.02)", padding: "16px", borderRadius: "8px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "4px" }}>
                         <span style={{ fontSize: "10px", color: "var(--text3)", fontWeight: "bold", textTransform: "uppercase" }}>Tổng lệnh chốt</span>
                         <strong style={{ fontSize: "20px", color: "#fff", fontFamily: "monospace" }}>
-                          {backtestStats.total}
+                          {backtestLoading && closedTrades.length === 0 ? "⏳ ..." : backtestStats.total}
                         </strong>
                       </div>
                       <div style={{ background: "rgba(255,255,255,0.02)", padding: "16px", borderRadius: "8px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "4px" }}>
                         <span style={{ fontSize: "10px", color: "var(--text3)", fontWeight: "bold", textTransform: "uppercase" }}>Tỷ Lệ Thắng (Win Rate)</span>
                         <strong style={{ fontSize: "20px", color: backtestStats.winRate >= 50 ? "var(--green)" : "var(--yellow)", fontFamily: "monospace" }}>
-                          {backtestStats.winRate}%
+                          {backtestLoading && closedTrades.length === 0 ? "⏳ ..." : `${backtestStats.winRate}%`}
                         </strong>
                       </div>
                       <div style={{ background: "rgba(255,255,255,0.02)", padding: "16px", borderRadius: "8px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "4px" }}>
                         <span style={{ fontSize: "10px", color: "var(--text3)", fontWeight: "bold", textTransform: "uppercase" }}>Pips Ròng tích lũy</span>
                         <strong style={{ fontSize: "20px", color: backtestStats.netPips >= 0 ? "var(--green)" : "var(--red)", fontFamily: "monospace" }}>
-                          {backtestStats.netPips >= 0 ? "+" : ""}{backtestStats.netPips} pips
+                          {backtestLoading && closedTrades.length === 0 ? "⏳ ..." : `${backtestStats.netPips >= 0 ? "+" : ""}${backtestStats.netPips} pips`}
                         </strong>
                       </div>
                     </div>
