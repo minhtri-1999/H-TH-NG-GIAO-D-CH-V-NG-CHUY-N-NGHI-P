@@ -915,38 +915,32 @@ body {
     height: auto !important;
   }
 
-  /* LAYOUT & ORDER */
+  /* LAYOUT & ORDER WITH DISPLAY: CONTENTS FOR CLEAN REORDERING */
   .layout {
+    display: flex !important;
     flex-direction: column !important;
     overflow: visible !important;
     height: auto !important;
-  }
-  .sidebar {
-    width: 100% !important;
-    order: 2 !important; /* Stacks sidebar cleanly below the chart & terminal tabs */
-    border-right: none !important;
-    border-top: 1px solid var(--border) !important;
-    height: auto !important;
-    overflow: visible !important;
-    flex-shrink: 0 !important;
   }
   .main {
-    width: 100% !important;
-    order: 1 !important; /* Keeps primary chart & terminal tabs at the top for quick access */
-    height: auto !important;
-    overflow: visible !important;
-    flex-shrink: 0 !important;
+    display: contents !important;
   }
-  
-  /* WORKSPACE CHART & ECONOMIC CALENDAR / ORDER BOOK */
   .main-workspace {
+    display: contents !important;
+  }
+  .sym-header {
+    order: 1 !important;
     flex-direction: column !important;
-    min-height: auto !important;
-    height: auto !important;
-    overflow: visible !important;
-    flex-shrink: 0 !important;
+    align-items: center !important;
+    text-align: center !important;
+    padding: 10px 14px !important;
+    gap: 8px !important;
+  }
+  .load-bar, .err-msg {
+    order: 2 !important;
   }
   .chart-column {
+    order: 3 !important;
     width: 100% !important;
     height: 350px !important; /* Optimized height for mobile viewports */
     min-height: 350px !important;
@@ -962,7 +956,22 @@ body {
     overflow: hidden !important;
     flex-shrink: 0 !important;
   }
+  .sidebar {
+    order: 4 !important; /* Renders sidebar immediately below the chart on mobile! */
+    width: 100% !important;
+    border-right: none !important;
+    border-top: 1px solid var(--border) !important;
+    height: auto !important;
+    overflow: visible !important;
+    flex-shrink: 0 !important;
+  }
+  .signal-dash {
+    order: 5 !important; /* Renders technical tabs dock below the sidebar! */
+    width: 100% !important;
+    flex-shrink: 0 !important;
+  }
   .realtime-panel {
+    order: 6 !important; /* Renders Economic Calendar at the very bottom on mobile! */
     width: 100% !important;
     border-left: none !important;
     border-top: 1px solid var(--border) !important;
@@ -1012,14 +1021,7 @@ body {
     margin: 0 !important;
   }
 
-  /* HEADER & TIME INTERVALS BUTTONS */
-  .sym-header {
-    flex-direction: column !important;
-    align-items: center !important;
-    text-align: center !important;
-    padding: 10px 14px !important;
-    gap: 8px !important;
-  }
+
   .sym-info {
     flex-direction: column !important;
     align-items: center !important;
