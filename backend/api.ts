@@ -201,55 +201,97 @@ function parseGoldOHLC(data: any[], apiTf: string): GoldChartResult {
   return result;
 }
 
-// Binance intervals for PAXGUSDT fallback (Tracks Gold 1:1)
-const BINANCE_INTERVALS: Record<string, string> = {
+// Yahoo Finance intervals and ranges for GC=F fallback (Gold Futures)
+const YAHOO_INTERVALS: Record<string, string> = {
   "1": "1m",
   "5": "5m",
   "15": "15m",
   "60": "1h",
   "1D": "1d",
-  "1W": "1w",
-  "1M": "1M",
+  "1W": "1wk",
+  "1M": "1mo",
+};
+
+const YAHOO_RANGES: Record<string, string> = {
+  "1": "1d",
+  "5": "5d",
+  "15": "5d",
+  "60": "30d",
+  "1D": "1y",
+  "1W": "5y",
+  "1M": "10y",
 };
 
 async function getYahooFinanceGoldFallback(timeframe: string, cacheKey: string, currentCandleOpen: number): Promise<GoldChartResult> {
-  const interval = BINANCE_INTERVALS[timeframe] || "1d";
-  const url = `https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=${interval}&limit=1000`;
+  const interval = YAHOO_INTERVALS[timeframe] || "1d";
+  const range = YAHOO_RANGES[timeframe] || "1y";
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=${interval}&range=${range}`;
 
-  const resp = await fetch(url);
+  const resp = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    }
+  });
+
   if (!resp.ok) {
-    throw new Error(`Không thể lấy dữ liệu biểu đồ Vàng từ RapidAPI lẫn nguồn Fallback Binance`);
+    throw new Error(`Không thể lấy dữ liệu biểu đồ Vàng từ RapidAPI lẫn nguồn Fallback Yahoo Finance: ${resp.statusText}`);
   }
 
   const json = await resp.json();
-  if (!Array.isArray(json) || json.length === 0) throw new Error("Dữ liệu biểu đồ trống");
+  const result = json.chart?.result?.[0];
+  if (!result) throw new Error("Dữ liệu biểu đồ từ Yahoo Finance trống hoặc lỗi");
+
+  const timestamps = result.timestamp || [];
+  const quote = result.indicators?.quote?.[0];
+  if (!quote || timestamps.length === 0) throw new Error("Dữ liệu nến từ Yahoo Finance không đầy đủ");
+
+  const opens = quote.open || [];
+  const highs = quote.high || [];
+  const lows = quote.low || [];
+  const closes = quote.close || [];
+  const volumes = quote.volume || [];
 
   // Fetch true FOREXCOM price to calculate the normalization offset (spread delta)
   let offset = 0;
   try {
     const realTime = await getGoldRealtimePrice();
-    const paxgLastClose = Number(json[json.length - 1][4]);
-    offset = realTime.price - paxgLastClose;
+    // find last valid close price
+    let lastValidClose = 2350;
+    for (let i = closes.length - 1; i >= 0; i--) {
+      if (closes[i] !== null && closes[i] !== undefined) {
+        lastValidClose = closes[i];
+        break;
+      }
+    }
+    offset = realTime.price - lastValidClose;
   } catch (e) {
     console.error("Failed to calculate offset", e);
   }
 
   const clean: GoldChartResult = { timestamp: [], open: [], high: [], low: [], close: [], volume: [] };
-  for (const candle of json) {
-    clean.timestamp.push(Math.floor(candle[0] / 1000));
-    // Normalize proxy data to match exact FOREXCOM prices
-    clean.open.push(Number(candle[1]) + offset);
-    clean.high.push(Number(candle[2]) + offset);
-    clean.low.push(Number(candle[3]) + offset);
-    clean.close.push(Number(candle[4]) + offset);
-    clean.volume.push(Number(candle[5]));
+  for (let i = 0; i < timestamps.length; i++) {
+    const t = timestamps[i];
+    const o = opens[i];
+    const h = highs[i];
+    const l = lows[i];
+    const c = closes[i];
+    const v = volumes[i] || 0;
+
+    // Filter out null values sometimes returned by Yahoo Finance for weekend/holiday gaps
+    if (t !== null && o !== null && h !== null && l !== null && c !== null) {
+      clean.timestamp.push(t);
+      clean.open.push(o + offset);
+      clean.high.push(h + offset);
+      clean.low.push(l + offset);
+      clean.close.push(c + offset);
+      clean.volume.push(v);
+    }
   }
 
   const lastCandleTime = clean.timestamp[clean.timestamp.length - 1];
   let ttl = ["1", "5"].includes(timeframe) ? 10_000 : 60_000;
   if (lastCandleTime && lastCandleTime < currentCandleOpen) {
-    // Binance has not registered the new candle yet, retry soon!
-    console.log(`[Binance Pending] Timeframe ${timeframe} waiting for candle ${currentCandleOpen} to be registered. Setting short 1.5s cache.`);
+    console.log(`[Yahoo Pending] Timeframe ${timeframe} waiting for candle ${currentCandleOpen} to be registered. Setting short 1.5s cache.`);
     ttl = 1500;
   }
 

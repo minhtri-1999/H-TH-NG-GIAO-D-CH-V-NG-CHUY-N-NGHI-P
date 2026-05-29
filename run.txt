@@ -5,5 +5,5 @@ deno task dev
 deno task build
 
 # Triển khai lên Deno Deploy (Thay thế TOKEN_CUA_BAN bằng mã token bắt đầu bằng ddp_ từ https://dash.deno.com/account#access-tokens)
-$env:DENO_DEPLOY_TOKEN="TOKEN_CUA_BAN"
+$env:DENO_DEPLOY_TOKEN="ddp_Vung9OteOGz4CAzW6ehrERYuQWycgeksqdsa"
 deno task deploy
