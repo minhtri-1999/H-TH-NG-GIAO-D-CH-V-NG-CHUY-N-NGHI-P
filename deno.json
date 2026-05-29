@@ -2,6 +2,6 @@
   "tasks": {
     "dev": "deno run --allow-net --allow-read --allow-write --allow-env --env --unstable-kv main.ts",
     "build": "deno run -A build.ts",
-    "deploy": "deno run -A jsr:@deno/deployctl deploy --project=xauusd-gold-terminal --prod main.ts"
+    "deploy": "deno run -A jsr:@deno/deployctl deploy --prod main.ts"
   }
 }
