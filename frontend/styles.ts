@@ -870,10 +870,16 @@ body {
 }
 
 @media (max-width: 780px) {
+  /* BODY & ROOT SCROLLABLE FOR MOBILE */
+  body, .root {
+    overflow: auto !important;
+    height: auto !important;
+  }
+
   /* LAYOUT & ORDER */
   .layout {
     flex-direction: column !important;
-    overflow-y: auto !important;
+    overflow: visible !important;
     height: auto !important;
   }
   .sidebar {
@@ -882,13 +888,15 @@ body {
     border-right: none !important;
     border-top: 1px solid var(--border) !important;
     height: auto !important;
-    overflow-y: visible !important;
+    overflow: visible !important;
+    flex-shrink: 0 !important;
   }
   .main {
     width: 100% !important;
     order: 1 !important; /* Keeps primary chart & terminal tabs at the top for quick access */
     height: auto !important;
     overflow: visible !important;
+    flex-shrink: 0 !important;
   }
   
   /* WORKSPACE CHART & ECONOMIC CALENDAR / ORDER BOOK */
@@ -897,23 +905,27 @@ body {
     min-height: auto !important;
     height: auto !important;
     overflow: visible !important;
+    flex-shrink: 0 !important;
   }
   .chart-column {
     width: 100% !important;
-    height: 380px !important; /* Perfect height for H1 candles on mobile viewports */
+    height: 350px !important; /* Optimized height for mobile viewports */
     min-height: 350px !important;
     overflow: hidden !important;
+    flex-shrink: 0 !important;
   }
   .chart-wrap {
     height: 100% !important;
     overflow: hidden !important;
+    flex-shrink: 0 !important;
   }
   .realtime-panel {
     width: 100% !important;
     border-left: none !important;
     border-top: 1px solid var(--border) !important;
-    height: 400px !important; /* Dedicated space with independent scroll for calendar/order book */
-    overflow-y: auto !important;
+    height: 380px !important; /* Dedicated space with independent scroll for calendar */
+    overflow: hidden !important;
+    flex-shrink: 0 !important;
   }
 
   /* TOPBAR RESPONSIVENESS */
@@ -949,8 +961,7 @@ body {
     display: none !important; /* Hide millisecond badge on mobile to avoid layout crowding */
   }
   .clock {
-    font-size: 11px !important;
-    padding: 4px 8px !important;
+    display: none !important;
   }
   .topbar .tf-btn {
     padding: 4px 8px !important;
