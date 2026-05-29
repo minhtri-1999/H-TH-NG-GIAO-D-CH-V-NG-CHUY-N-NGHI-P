@@ -201,84 +201,59 @@ function parseGoldOHLC(data: any[], apiTf: string): GoldChartResult {
   return result;
 }
 
-// Yahoo Finance intervals and ranges for GC=F fallback (Gold Futures)
-const YAHOO_INTERVALS: Record<string, string> = {
-  "1": "1m",
-  "5": "5m",
-  "15": "15m",
-  "60": "1h",
-  "1D": "1d",
-  "1W": "1wk",
-  "1M": "1mo",
-};
-
-const YAHOO_RANGES: Record<string, string> = {
-  "1": "1d",
-  "5": "5d",
-  "15": "5d",
-  "60": "30d",
-  "1D": "1y",
-  "1W": "5y",
-  "1M": "10y",
+// Coinbase granularities for PAXG-USD fallback (highly robust US-regulated endpoint, never geoblocks Deno Deploy)
+const COINBASE_GRANULARITY: Record<string, number> = {
+  "1": 60,
+  "5": 300,
+  "15": 900,
+  "60": 3600,
+  "1D": 86400,
+  "1W": 86400,
+  "1M": 86400,
 };
 
 async function getYahooFinanceGoldFallback(timeframe: string, cacheKey: string, currentCandleOpen: number): Promise<GoldChartResult> {
-  const interval = YAHOO_INTERVALS[timeframe] || "1d";
-  const range = YAHOO_RANGES[timeframe] || "1y";
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=${interval}&range=${range}`;
+  const granularity = COINBASE_GRANULARITY[timeframe] || 86400;
+  const url = `https://api.exchange.coinbase.com/products/PAXG-USD/candles?granularity=${granularity}`;
 
   const resp = await fetch(url, {
     headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     }
   });
 
   if (!resp.ok) {
-    throw new Error(`Không thể lấy dữ liệu biểu đồ Vàng từ RapidAPI lẫn nguồn Fallback Yahoo Finance: ${resp.statusText}`);
+    throw new Error(`Không thể lấy dữ liệu biểu đồ Vàng từ RapidAPI lẫn nguồn Fallback Coinbase: ${resp.statusText}`);
   }
 
   const json = await resp.json();
-  const result = json.chart?.result?.[0];
-  if (!result) throw new Error("Dữ liệu biểu đồ từ Yahoo Finance trống hoặc lỗi");
+  if (!Array.isArray(json) || json.length === 0) {
+    throw new Error("Dữ liệu biểu đồ từ Coinbase trống hoặc lỗi");
+  }
 
-  const timestamps = result.timestamp || [];
-  const quote = result.indicators?.quote?.[0];
-  if (!quote || timestamps.length === 0) throw new Error("Dữ liệu nến từ Yahoo Finance không đầy đủ");
-
-  const opens = quote.open || [];
-  const highs = quote.high || [];
-  const lows = quote.low || [];
-  const closes = quote.close || [];
-  const volumes = quote.volume || [];
+  // Coinbase returns candles in reverse chronological order (newest first). Let's sort them chronologically (oldest first).
+  const sorted = [...json].sort((a, b) => a[0] - b[0]);
 
   // Fetch true FOREXCOM price to calculate the normalization offset (spread delta)
   let offset = 0;
   try {
     const realTime = await getGoldRealtimePrice();
-    // find last valid close price
-    let lastValidClose = 2350;
-    for (let i = closes.length - 1; i >= 0; i--) {
-      if (closes[i] !== null && closes[i] !== undefined) {
-        lastValidClose = closes[i];
-        break;
-      }
-    }
-    offset = realTime.price - lastValidClose;
+    const lastClose = Number(sorted[sorted.length - 1][4]); // close price
+    offset = realTime.price - lastClose;
   } catch (e) {
     console.error("Failed to calculate offset", e);
   }
 
   const clean: GoldChartResult = { timestamp: [], open: [], high: [], low: [], close: [], volume: [] };
-  for (let i = 0; i < timestamps.length; i++) {
-    const t = timestamps[i];
-    const o = opens[i];
-    const h = highs[i];
-    const l = lows[i];
-    const c = closes[i];
-    const v = volumes[i] || 0;
+  for (const candle of sorted) {
+    const t = Number(candle[0]);
+    const l = Number(candle[1]);
+    const h = Number(candle[2]);
+    const o = Number(candle[3]);
+    const c = Number(candle[4]);
+    const v = Number(candle[5]);
 
-    // Filter out null values sometimes returned by Yahoo Finance for weekend/holiday gaps
-    if (t !== null && o !== null && h !== null && l !== null && c !== null) {
+    if (!isNaN(t) && !isNaN(o) && !isNaN(h) && !isNaN(l) && !isNaN(c)) {
       clean.timestamp.push(t);
       clean.open.push(o + offset);
       clean.high.push(h + offset);
@@ -291,7 +266,7 @@ async function getYahooFinanceGoldFallback(timeframe: string, cacheKey: string, 
   const lastCandleTime = clean.timestamp[clean.timestamp.length - 1];
   let ttl = ["1", "5"].includes(timeframe) ? 10_000 : 60_000;
   if (lastCandleTime && lastCandleTime < currentCandleOpen) {
-    console.log(`[Yahoo Pending] Timeframe ${timeframe} waiting for candle ${currentCandleOpen} to be registered. Setting short 1.5s cache.`);
+    console.log(`[Coinbase Pending] Timeframe ${timeframe} waiting for candle ${currentCandleOpen} to be registered. Setting short 1.5s cache.`);
     ttl = 1500;
   }
 
