@@ -1,0 +1,9 @@
+# Chạy máy chủ cục bộ (Local Server)
+deno task dev
+
+# Biên dịch & đóng gói giao diện (Build Frontend)
+deno task build
+
+# Triển khai lên Deno Deploy (Thay thế TOKEN_CUA_BAN bằng mã token bắt đầu bằng ddp_ từ https://dash.deno.com/account#access-tokens)
+$env:DENO_DEPLOY_TOKEN="TOKEN_CUA_BAN"
+deno task deploy
