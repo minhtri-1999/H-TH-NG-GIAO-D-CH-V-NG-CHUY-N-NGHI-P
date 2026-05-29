@@ -257,8 +257,8 @@ export default function App() {
     const total = filteredClosedTrades.length;
     const wins = filteredClosedTrades.filter(t => t.status === "TP1" || t.status === "TP2").length;
     const winRate = Math.round((wins / total) * 100);
-    const netPips = Number(filteredClosedTrades.reduce((sum, t) => sum + t.pips, 0).toFixed(1));
-    const totalProfit = Number(filteredClosedTrades.reduce((sum, t) => sum + t.profitUsd, 0).toFixed(2));
+    const netPips = Number(filteredClosedTrades.reduce((sum, t) => sum + (Number(t.pips) || 0), 0).toFixed(1));
+    const totalProfit = Number(filteredClosedTrades.reduce((sum, t) => sum + (Number(t.profitUsd) || 0), 0).toFixed(2));
     return { winRate, netPips, totalProfit, total };
   }, [filteredClosedTrades]);
 
