@@ -1097,6 +1097,38 @@ body {
   border-bottom: 1.5px solid var(--border);
   padding-bottom: 10px;
 }
+
+/* PREMIUM RESPONSIVE SCROLLABLE TABLE STYLES */
+.smc-table-wrap {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  padding-bottom: 8px;
+  width: 100%;
+}
+.smc-table-wrap::-webkit-scrollbar {
+  height: 6px;
+}
+.smc-table-wrap::-webkit-scrollbar-track {
+  background: var(--bg);
+  border-radius: 3px;
+}
+.smc-table-wrap::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+.smc-table-wrap::-webkit-scrollbar-thumb:hover {
+  background: var(--gold);
+}
+
+.smc-card table {
+  min-width: 900px !important;
+  width: 100% !important;
+}
+.smc-card table th,
+.smc-card table td {
+  white-space: nowrap !important;
+}
+
 .smc-list {
   display: flex;
   flex-direction: column;

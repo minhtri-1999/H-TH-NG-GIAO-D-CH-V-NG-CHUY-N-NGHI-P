@@ -3567,7 +3567,7 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                   {/* Backtest Table Card */}
                   <div className="smc-card" style={{ margin: 0 }}>
                     <h3 className="smc-card-title">📋 Nhật Ký Giao Dịch Chốt Lời / Cắt Lỗ Chi Tiết</h3>
-                    <div style={{ overflowX: "auto" }}>
+                    <div className="smc-table-wrap">
                       <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "12px" }}>
                         <thead>
                           <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--text2)", background: "rgba(255,255,255,0.01)" }}>
