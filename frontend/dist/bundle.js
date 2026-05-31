@@ -2399,7 +2399,116 @@ body {
   border-left: 5px solid var(--gold);
 }
 
+/* =========================================================================
+   \u{1F4F1} HIGH-FIDELITY IPAD & TABLET RESPONSIVE ENGINE (NO VIRTUAL CODE)
+   ========================================================================= */
+
+@media (max-width: 1024px) {
+  /* 1. Header co gi\xE3n linh ho\u1EA1t */
+  .brand-name {
+    font-size: 15px !important;
+  }
+  .brand-badge {
+    font-size: 8px !important;
+    padding: 1px 5px !important;
+  }
+  .topbar {
+    padding: 0 12px !important;
+  }
+  .topbar-left {
+    gap: 12px !important;
+  }
+  .topbar-right {
+    gap: 10px !important;
+  }
+  
+  /* 2. Chuy\u1EC3n \u0111\u1ED5i layout sang x\u1EBFp ch\u1ED3ng d\u1ECDc cho iPad d\u1ECDc (< 1024px) */
+  .layout {
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .sidebar {
+    width: 100% !important;
+    height: auto !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border) !important;
+    overflow-y: visible !important;
+    flex-shrink: 0 !important;
+  }
+  
+  /* D\xE0n Logo V\xE0ng & Confluence Card n\u1EB1m song song th\xE0nh l\u01B0\u1EDBi 2 c\u1ED9t */
+  .sidebar > div {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 16px !important;
+    padding: 16px !important;
+  }
+  
+  .gold-profile-card {
+    height: 100% !important;
+  }
+
+  .sug-card {
+    height: 100% !important;
+  }
+
+  .main {
+    height: auto !important;
+    overflow: visible !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* 3. Workspace x\u1EBFp ch\u1ED3ng d\u1ECDc: Chart ph\xEDa tr\xEAn, Order Book ph\xEDa d\u01B0\u1EDBi */
+  .main-workspace {
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: 820px !important;
+  }
+  
+  .chart-column {
+    height: 480px !important;
+    flex-shrink: 0 !important;
+    border-bottom: 1px solid var(--border) !important;
+  }
+
+  .realtime-panel {
+    width: 100% !important;
+    height: 380px !important;
+    border-left: none !important;
+  }
+  
+  /* 4. T\xE1i ph\xE2n chia l\u01B0\u1EDBi ch\u1EC9 b\xE1o & d\u1EF1 b\xE1o ch\u1ED1ng v\u1EE1 khung ch\u1EEF */
+  .top-metrics-row {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+  
+  .ind-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 10px !important;
+  }
+  
+  .outlook-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 14px !important;
+  }
+}
+
 @media (max-width: 768px) {
+  .sidebar > div {
+    grid-template-columns: 1fr !important;
+  }
+  .ind-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .outlook-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .brand-name {
+    font-size: 13px !important;
+  }
   .hide-on-mobile {
     display: none !important;
   }

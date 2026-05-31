@@ -2360,7 +2360,116 @@ body {
   border-left: 5px solid var(--gold);
 }
 
+/* =========================================================================
+   📱 HIGH-FIDELITY IPAD & TABLET RESPONSIVE ENGINE (NO VIRTUAL CODE)
+   ========================================================================= */
+
+@media (max-width: 1024px) {
+  /* 1. Header co giãn linh hoạt */
+  .brand-name {
+    font-size: 15px !important;
+  }
+  .brand-badge {
+    font-size: 8px !important;
+    padding: 1px 5px !important;
+  }
+  .topbar {
+    padding: 0 12px !important;
+  }
+  .topbar-left {
+    gap: 12px !important;
+  }
+  .topbar-right {
+    gap: 10px !important;
+  }
+  
+  /* 2. Chuyển đổi layout sang xếp chồng dọc cho iPad dọc (< 1024px) */
+  .layout {
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .sidebar {
+    width: 100% !important;
+    height: auto !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border) !important;
+    overflow-y: visible !important;
+    flex-shrink: 0 !important;
+  }
+  
+  /* Dàn Logo Vàng & Confluence Card nằm song song thành lưới 2 cột */
+  .sidebar > div {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 16px !important;
+    padding: 16px !important;
+  }
+  
+  .gold-profile-card {
+    height: 100% !important;
+  }
+
+  .sug-card {
+    height: 100% !important;
+  }
+
+  .main {
+    height: auto !important;
+    overflow: visible !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* 3. Workspace xếp chồng dọc: Chart phía trên, Order Book phía dưới */
+  .main-workspace {
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: 820px !important;
+  }
+  
+  .chart-column {
+    height: 480px !important;
+    flex-shrink: 0 !important;
+    border-bottom: 1px solid var(--border) !important;
+  }
+
+  .realtime-panel {
+    width: 100% !important;
+    height: 380px !important;
+    border-left: none !important;
+  }
+  
+  /* 4. Tái phân chia lưới chỉ báo & dự báo chống vỡ khung chữ */
+  .top-metrics-row {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+  
+  .ind-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 10px !important;
+  }
+  
+  .outlook-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 14px !important;
+  }
+}
+
 @media (max-width: 768px) {
+  .sidebar > div {
+    grid-template-columns: 1fr !important;
+  }
+  .ind-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .outlook-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .brand-name {
+    font-size: 13px !important;
+  }
   .hide-on-mobile {
     display: none !important;
   }
