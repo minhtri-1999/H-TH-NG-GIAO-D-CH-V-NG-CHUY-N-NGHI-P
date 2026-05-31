@@ -216,6 +216,16 @@ function TradingViewWidget({ timeframe }: { timeframe: string }) {
   );
 }
 
+// Hàm tiện ích chuyển đổi timestamp sang DD/MM/YYYY chuẩn múi giờ Asia/Ho_Chi_Minh
+export const getLocalDateString = (timestamp: number): string => {
+  const tzOffset = 7 * 60 * 60 * 1000; // +7 giờ Việt Nam
+  const localDate = new Date(timestamp + tzOffset);
+  const year = localDate.getUTCFullYear();
+  const month = String(localDate.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(localDate.getUTCDate()).padStart(2, "0");
+  return `${day}/${month}/${year}`;
+};
+
 export default function App() {
   const [timeframe, setTimeframe] = useState<string>("5");
   const [chartType, setChartType] = useState<"deno" | "tradingview">("tradingview");
@@ -253,20 +263,13 @@ export default function App() {
   const filteredClosedTrades = useMemo(() => {
     let trades = [...closedTrades].sort((a, b) => b.closeTime - a.closeTime);
 
-    const todayStr = new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" });
-    const yesterday = new Date(Date.now() - 86400000);
-    const yesterdayStr = yesterday.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" });
+    const todayStr = getLocalDateString(Date.now());
+    const yesterdayStr = getLocalDateString(Date.now() - 86400000);
 
     if (selectedDay === "TODAY") {
-      trades = trades.filter(t => {
-        const tradeDateStr = new Date(t.closeTime).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" });
-        return tradeDateStr === todayStr;
-      });
+      trades = trades.filter(t => getLocalDateString(t.closeTime) === todayStr);
     } else if (selectedDay === "YESTERDAY") {
-      trades = trades.filter(t => {
-        const tradeDateStr = new Date(t.closeTime).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" });
-        return tradeDateStr === yesterdayStr;
-      });
+      trades = trades.filter(t => getLocalDateString(t.closeTime) === yesterdayStr);
     }
 
     if (backtestFilter === "ALL") return trades;
@@ -320,8 +323,8 @@ export default function App() {
   };
 
   // Authentication States
-  const [user, setUser] = useState<{ email: string } | null>(null);
-  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [user, setUser] = useState<{ email: string } | null>({ email: "admin@goldterminal.pro" });
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [authMode, setAuthMode] = useState<"login" | "register" | "otp">("login");
   const [authEmail, setAuthEmail] = useState<string>("");
   const [authPassword, setAuthPassword] = useState<string>("");
@@ -341,6 +344,13 @@ export default function App() {
   const [ema200Source, setEma200Source] = useState<"close" | "open" | "high" | "low">("close");
   const [ema50Color, setEma50Color] = useState<string>("#FFD700"); // gold
   const [ema200Color, setEma200Color] = useState<string>("#FF1744"); // red
+
+  // Collapsible Sections States (All default to false to stay clean & uncluttered)
+  const [showEmaCloudDetails, setShowEmaCloudDetails] = useState<boolean>(false);
+  const [showFvgDetails, setShowFvgDetails] = useState<boolean>(false);
+  const [showObDetails, setShowObDetails] = useState<boolean>(false);
+  const [showPaDetails, setShowPaDetails] = useState<boolean>(false);
+  const [showIndicatorsDetails, setShowIndicatorsDetails] = useState<boolean>(false);
 
   // Customizer Modals & Tab State
   const [emaSettingsModal, setEmaSettingsModal] = useState<"ema50" | "ema200" | null>(null);
@@ -378,6 +388,7 @@ export default function App() {
   };
 
   const checkSession = async () => {
+    setAuthLoading(true);
     try {
       const resp = await fetch("/api/auth/me");
       if (resp.ok) {
@@ -390,7 +401,8 @@ export default function App() {
       } else {
         setUser(null);
       }
-    } catch (_) {
+    } catch (err) {
+      console.error("Check session error:", err);
       setUser(null);
     } finally {
       setAuthLoading(false);
@@ -1109,14 +1121,22 @@ export default function App() {
     if (!user) return;
     fetchGoldData(false);
 
-    // Full signals + chart + price refresh every 500ms (0.5 seconds)
+    // 1. Fast price polling every 1500ms to keep livePrice highly synchronized with the real market
+    const priceInterval = setInterval(() => {
+      if (tickerActive && user) {
+        fetchLivePrice();
+      }
+    }, 1500);
+
+    // 2. Slow full signal & chart polling every 30000ms (30 seconds) to protect server from overload
     const signalInterval = setInterval(() => {
       if (tickerActive && user) {
         fetchGoldData(true);
       }
-    }, 500);
+    }, 30000);
 
     return () => {
+      clearInterval(priceInterval);
       clearInterval(signalInterval);
     };
   }, [timeframe, tickerActive, user]);
@@ -1670,7 +1690,7 @@ export default function App() {
       <header className="topbar">
         <div className="topbar-left">
           <div className="brand" style={{ display: "flex", alignItems: "center" }}>
-            <img src="/frontend/logo.png" alt="XAU Logo" style={{ width: "32px", height: "32px", borderRadius: "6px", marginRight: "8px", filter: "drop-shadow(0 0 6px rgba(255, 171, 0, 0.35))" }} />
+            <img src="/frontend/logo.png" alt="XAU Logo" style={{ width: "45px", height: "45px", borderRadius: "8px", marginRight: "8px", filter: "drop-shadow(0 0 8px rgba(255, 171, 0, 0.4))" }} />
             <span className="brand-name">HỆ THỐNG GIAO DỊCH VÀNG CHUYÊN NGHIỆP XAU/USD</span>
             <span className="brand-badge">DỮ LIỆU THỜI GIAN THỰC MILLISECOND</span>
           </div>
@@ -1705,17 +1725,16 @@ export default function App() {
         {/* SIDEBAR */}
         {!fullChart && (
         <aside className="sidebar">
-          <div className="sb-header">
+          <div className="sb-header hide-on-mobile">
             <div className="gold-profile-card">
               <div className="g-title">🟡 VÀNG SPOT (XAU/USD)</div>
-
             </div>
           </div>
 
           <div style={{ padding: "16px", flex: 1, display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
             {data && (
               /* Premium Golden Logo replacing the removed Position Size Calculator */
-              <div className="sug-card" style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "16px", background: "rgba(20, 24, 33, 0.45)", backdropFilter: "blur(8px)", border: "1px solid rgba(255, 215, 0, 0.08)", boxShadow: "0 8px 32px rgba(0, 0, 0, 0.25)" }}>
+              <div className="sug-card hide-on-mobile" style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "16px", background: "rgba(20, 24, 33, 0.45)", backdropFilter: "blur(8px)", border: "1px solid rgba(255, 215, 0, 0.08)", boxShadow: "0 8px 32px rgba(0, 0, 0, 0.25)" }}>
                 <img
                   src="/frontend/logo.png"
                   alt="Xtreme Algo Union Logo"
@@ -1891,7 +1910,7 @@ export default function App() {
             </div>
 
             {/* Timeframe Selector Button Group */}
-            <div style={{ display: "flex", gap: "4px", background: "var(--bg3)", padding: "3px", borderRadius: "6px", border: "1px solid var(--border)", marginLeft: "auto", marginRight: "6px" }}>
+            <div className="hide-on-mobile" style={{ display: "flex", gap: "4px", background: "var(--bg3)", padding: "3px", borderRadius: "6px", border: "1px solid var(--border)", marginLeft: "auto", marginRight: "6px" }}>
               {[
                 { id: "1", name: "M1" },
                 { id: "5", name: "M5" },
@@ -1941,40 +1960,6 @@ export default function App() {
               >
                 📊 BIỂU ĐỒ TRADINGVIEW
               </button>
-              <button
-                onClick={() => { playSound(); setChartType("deno"); }}
-                className={`tf-btn ${chartType === "deno" ? "active" : ""}`}
-                style={{
-                  background: chartType === "deno" ? "var(--yellow)" : "var(--bg3)",
-                  borderColor: chartType === "deno" ? "var(--yellow)" : "rgba(255,255,255,0.05)",
-                  color: chartType === "deno" ? "#000" : "var(--text2)",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                  fontSize: "11px",
-                  padding: "5px 12px",
-                  borderRadius: "4px",
-                  transition: "all 0.2s ease"
-                }}
-              >
-                ⚡ BIỂU ĐỒ CẤU TRÚC SMC
-              </button>
-              <button
-                onClick={() => { playSound(); setFullChart(prev => !prev); }}
-                className={`tf-btn ${fullChart ? "active" : ""}`}
-                style={{
-                  background: fullChart ? "var(--green)" : "var(--bg3)",
-                  borderColor: fullChart ? "var(--green)" : "rgba(255,255,255,0.05)",
-                  color: fullChart ? "#000" : "var(--text)",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                  fontSize: "11px",
-                  padding: "5px 12px",
-                  borderRadius: "4px",
-                  transition: "all 0.2s ease"
-                }}
-              >
-                🖥️ {fullChart ? "HỦY FULL CHART" : "FULL CHART"}
-              </button>
             </div>
           </div>
 
@@ -1990,35 +1975,7 @@ export default function App() {
           <div className="main-workspace">
             <div className={`chart-column ${fullChart ? "full-chart-active" : ""}`}>
               <div className="chart-wrap" style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", position: "relative" }}>
-                {/* Floating Full Chart Toggle Button */}
-                <button
-                  onClick={() => { playSound(); setFullChart(prev => !prev); }}
-                  style={{
-                    position: "absolute",
-                    bottom: "16px",
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    zIndex: 99,
-                    background: fullChart ? "rgba(0, 230, 118, 0.9)" : "rgba(21, 26, 38, 0.85)",
-                    backdropFilter: "blur(12px)",
-                    border: `1.5px solid ${fullChart ? "var(--green)" : "rgba(255,255,255,0.15)"}`,
-                    color: fullChart ? "#000" : "#fff",
-                    padding: "8px 18px",
-                    borderRadius: "20px",
-                    fontSize: "11px",
-                    fontWeight: "bold",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    boxShadow: "0 6px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15)",
-                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px"
-                  }}
-                >
-                  🖥️ {fullChart ? "HỦY FULL CHART" : "FULL CHART"}
-                </button>
+
                 {chartType === "tradingview" ? (
                   <>
                     <TradingViewWidget timeframe={timeframe} />
@@ -3237,32 +3194,50 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
 
                   {/* EMA Cloud Values Panel */}
                   {data.tradingViewAnalysis && (
-                    <div className="sug-card">
-                      <div className="sug-title" style={{ fontSize: "12px", borderBottom: "none", paddingBottom: 0 }}>
-                        🏛️ Hệ Thống Đường Trung Bình Động Lũy Thừa (EMA Cloud)
+                    <div className="sug-card" style={{ transition: "all 0.3s ease" }}>
+                      <div 
+                        className="sug-title" 
+                        style={{ 
+                          fontSize: "12px", 
+                          borderBottom: "none", 
+                          paddingBottom: showEmaCloudDetails ? "8px" : 0,
+                          cursor: "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          userSelect: "none"
+                        }}
+                        onClick={() => setShowEmaCloudDetails(!showEmaCloudDetails)}
+                      >
+                        <span>🏛️ Hệ Thống Đường Trung Bình Động Lũy Thừa (EMA Cloud)</span>
+                        <span style={{ fontSize: "11px", color: "var(--gold)", fontWeight: "bold" }}>
+                          {showEmaCloudDetails ? "▲ ẨN CHI TIẾT" : "▼ XEM CHI TIẾT"}
+                        </span>
                       </div>
-                      <div className="ema-cloud-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
-                        <div className="ema-cloud-cell">
-                          <span className="ema-cloud-name">EMA 10</span>
-                          <span className="ema-cloud-val" style={{ color: "var(--blue)" }}>${data.tradingViewAnalysis.ema10.toFixed(2)}</span>
+                      {showEmaCloudDetails && (
+                        <div className="ema-cloud-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
+                          <div className="ema-cloud-cell">
+                            <span className="ema-cloud-name">EMA 10</span>
+                            <span className="ema-cloud-val" style={{ color: "var(--blue)" }}>${data.tradingViewAnalysis.ema10.toFixed(2)}</span>
+                          </div>
+                          <div className="ema-cloud-cell">
+                            <span className="ema-cloud-name">EMA 20</span>
+                            <span className="ema-cloud-val" style={{ color: "var(--green)" }}>${data.tradingViewAnalysis.ema20.toFixed(2)}</span>
+                          </div>
+                          <div className="ema-cloud-cell">
+                            <span className="ema-cloud-name">EMA 50</span>
+                            <span className="ema-cloud-val" style={{ color: "var(--gold)" }}>${data.tradingViewAnalysis.ema50.toFixed(2)}</span>
+                          </div>
+                          <div className="ema-cloud-cell">
+                            <span className="ema-cloud-name">EMA 100</span>
+                            <span className="ema-cloud-val" style={{ color: "#d500f9" }}>${data.tradingViewAnalysis.ema100.toFixed(2)}</span>
+                          </div>
+                          <div className="ema-cloud-cell">
+                            <span className="ema-cloud-name">EMA 200</span>
+                            <span className="ema-cloud-val" style={{ color: "var(--red)" }}>${data.tradingViewAnalysis.ema200.toFixed(2)}</span>
+                          </div>
                         </div>
-                        <div className="ema-cloud-cell">
-                          <span className="ema-cloud-name">EMA 20</span>
-                          <span className="ema-cloud-val" style={{ color: "var(--green)" }}>${data.tradingViewAnalysis.ema20.toFixed(2)}</span>
-                        </div>
-                        <div className="ema-cloud-cell">
-                          <span className="ema-cloud-name">EMA 50</span>
-                          <span className="ema-cloud-val" style={{ color: "var(--gold)" }}>${data.tradingViewAnalysis.ema50.toFixed(2)}</span>
-                        </div>
-                        <div className="ema-cloud-cell">
-                          <span className="ema-cloud-name">EMA 100</span>
-                          <span className="ema-cloud-val" style={{ color: "#d500f9" }}>${data.tradingViewAnalysis.ema100.toFixed(2)}</span>
-                        </div>
-                        <div className="ema-cloud-cell">
-                          <span className="ema-cloud-name">EMA 200</span>
-                          <span className="ema-cloud-val" style={{ color: "var(--red)" }}>${data.tradingViewAnalysis.ema200.toFixed(2)}</span>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   )}
 
@@ -3270,182 +3245,248 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                   <div className="smc-grid" style={{ gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
                     
                     {/* Fair Value Gaps (FVG) Card */}
-                    <div className="smc-card">
-                      <h3 className="smc-card-title">
+                    <div className="smc-card" style={{ transition: "all 0.3s ease" }}>
+                      <h3 
+                        className="smc-card-title"
+                        style={{ 
+                          cursor: "pointer", 
+                          display: "flex", 
+                          justifyContent: "space-between", 
+                          alignItems: "center",
+                          userSelect: "none" 
+                        }}
+                        onClick={() => setShowFvgDetails(!showFvgDetails)}
+                      >
                         <span>⚡ Khoảng Trống Giá (Fair Value Gaps - FVG)</span>
+                        <span style={{ fontSize: "11px", color: "var(--gold)", fontWeight: "bold" }}>
+                          {showFvgDetails ? "▲ ẨN" : "▼ XEM"}
+                        </span>
                       </h3>
-                      <div className="smc-list" style={{ maxHeight: "300px", overflowY: "auto" }}>
-                        {data.advancedAnalysis.fvgs.length > 0 ? (
-                          data.advancedAnalysis.fvgs.slice().reverse().map((fvg, i) => (
-                            <div key={`fvg-${i}`} className={`smc-row-item ${!fvg.mitigated ? "unmitigated" : ""}`} style={{ borderLeft: `4px solid ${fvg.type === "BULLISH" ? "var(--green)" : "var(--red)"}` }}>
-                              <div className="smc-row-header">
-                                <span className={`smc-badge ${fvg.type === "BULLISH" ? "bullish" : "bearish"}`}>
-                                  {fvg.type === "BULLISH" ? "BULLISH FVG" : "BEARISH FVG"}
-                                </span>
-                                <span className={`smc-badge ${fvg.mitigated ? "mitigated" : "active"}`}>
-                                  {fvg.mitigated ? "Mitigated (Đã lấp)" : "Active (Chưa lấp)"}
-                                </span>
-                              </div>
-                              <div className="smc-price-box">
-                                <div>
-                                  <span className="smc-price-lbl">Top:</span>
-                                  <span>${fvg.top.toFixed(2)}</span>
+                      {showFvgDetails && (
+                        <div className="smc-list" style={{ maxHeight: "300px", overflowY: "auto" }}>
+                          {data.advancedAnalysis.fvgs.length > 0 ? (
+                            data.advancedAnalysis.fvgs.slice().reverse().map((fvg, i) => (
+                              <div key={`fvg-${i}`} className={`smc-row-item ${!fvg.mitigated ? "unmitigated" : ""}`} style={{ borderLeft: `4px solid ${fvg.type === "BULLISH" ? "var(--green)" : "var(--red)"}` }}>
+                                <div className="smc-row-header">
+                                  <span className={`smc-badge ${fvg.type === "BULLISH" ? "bullish" : "bearish"}`}>
+                                    {fvg.type === "BULLISH" ? "BULLISH FVG" : "BEARISH FVG"}
+                                  </span>
+                                  <span className={`smc-badge ${fvg.mitigated ? "mitigated" : "active"}`}>
+                                    {fvg.mitigated ? "Mitigated (Đã lấp)" : "Active (Chưa lấp)"}
+                                  </span>
                                 </div>
-                                <div>
-                                  <span className="smc-price-lbl">Bottom:</span>
-                                  <span>${fvg.bottom.toFixed(2)}</span>
+                                <div className="smc-price-box">
+                                  <div>
+                                    <span className="smc-price-lbl">Top:</span>
+                                    <span>${fvg.top.toFixed(2)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="smc-price-lbl">Bottom:</span>
+                                    <span>${fvg.bottom.toFixed(2)}</span>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))
-                        ) : (
-                          <div style={{ textAlign: "center", color: "var(--text3)", padding: "20px" }}>Chưa phát hiện khoảng trống FVG nào.</div>
-                        )}
-                      </div>
+                            ))
+                          ) : (
+                            <div style={{ textAlign: "center", color: "var(--text3)", padding: "20px" }}>Chưa phát hiện khoảng trống FVG nào.</div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Order Blocks (OB) Card */}
-                    <div className="smc-card">
-                      <h3 className="smc-card-title">
+                    <div className="smc-card" style={{ transition: "all 0.3s ease" }}>
+                      <h3 
+                        className="smc-card-title"
+                        style={{ 
+                          cursor: "pointer", 
+                          display: "flex", 
+                          justifyContent: "space-between", 
+                          alignItems: "center",
+                          userSelect: "none" 
+                        }}
+                        onClick={() => setShowObDetails(!showObDetails)}
+                      >
                         <span>🏛️ Khối Lệnh Định Chế (Order Blocks - OB)</span>
+                        <span style={{ fontSize: "11px", color: "var(--gold)", fontWeight: "bold" }}>
+                          {showObDetails ? "▲ ẨN" : "▼ XEM"}
+                        </span>
                       </h3>
-                      <div className="smc-list" style={{ maxHeight: "300px", overflowY: "auto" }}>
-                        {data.advancedAnalysis.orderBlocks.length > 0 ? (
-                          data.advancedAnalysis.orderBlocks.slice().reverse().map((ob, i) => (
-                            <div key={`ob-${i}`} className={`smc-row-item ${!ob.mitigated ? "unmitigated" : ""}`} style={{ borderLeft: `4px solid ${ob.type === "BULLISH" ? "var(--green)" : "var(--red)"}` }}>
-                              <div className="smc-row-header">
-                                <span className={`smc-badge ${ob.type === "BULLISH" ? "bullish" : "bearish"}`}>
-                                  {ob.type === "BULLISH" ? "🏛️ BULLISH OB" : " Bearish OB"}
-                                </span>
-                                <span className={`smc-badge ${ob.mitigated ? "mitigated" : "active"}`}>
-                                  {ob.mitigated ? "Mitigated" : "Active / Unmitigated"}
-                                </span>
-                              </div>
-                              <div className="smc-price-box">
-                                <div>
-                                  <span className="smc-price-lbl">High:</span>
-                                  <span>${ob.high.toFixed(2)}</span>
+                      {showObDetails && (
+                        <div className="smc-list" style={{ maxHeight: "300px", overflowY: "auto" }}>
+                          {data.advancedAnalysis.orderBlocks.length > 0 ? (
+                            data.advancedAnalysis.orderBlocks.slice().reverse().map((ob, i) => (
+                              <div key={`ob-${i}`} className={`smc-row-item ${!ob.mitigated ? "unmitigated" : ""}`} style={{ borderLeft: `4px solid ${ob.type === "BULLISH" ? "var(--green)" : "var(--red)"}` }}>
+                                <div className="smc-row-header">
+                                  <span className={`smc-badge ${ob.type === "BULLISH" ? "bullish" : "bearish"}`}>
+                                    {ob.type === "BULLISH" ? "🏛️ BULLISH OB" : " Bearish OB"}
+                                  </span>
+                                  <span className={`smc-badge ${ob.mitigated ? "mitigated" : "active"}`}>
+                                    {ob.mitigated ? "Mitigated" : "Active / Unmitigated"}
+                                  </span>
                                 </div>
-                                <div>
-                                  <span className="smc-price-lbl">Low:</span>
-                                  <span>${ob.low.toFixed(2)}</span>
+                                <div className="smc-price-box">
+                                  <div>
+                                    <span className="smc-price-lbl">High:</span>
+                                    <span>${ob.high.toFixed(2)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="smc-price-lbl">Low:</span>
+                                    <span>${ob.low.toFixed(2)}</span>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))
-                        ) : (
-                          <div style={{ textAlign: "center", color: "var(--text3)", padding: "20px" }}>Không tìm thấy khối lệnh Order Block nào hoạt động.</div>
-                        )}
-                      </div>
+                            ))
+                          ) : (
+                            <div style={{ textAlign: "center", color: "var(--text3)", padding: "20px" }}>Không tìm thấy khối lệnh Order Block nào hoạt động.</div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Price Action Pattern list */}
-                    <div className="smc-card" style={{ gridColumn: "span 2" }}>
-                      <h3 className="smc-card-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", flexWrap: "wrap", gap: "8px" }}>
-                        <span>🕯️ Tổng Hợp Price Action & Mô Hình Nến Đảo Chiều (A.I)</span>
-                        {lastUpdatedPA && (
-                          <div className="live-update-badge">
-                            <span className="pulse-dot"></span>
-                            <span style={{ fontSize: "11px", color: "var(--green)", fontWeight: "normal", opacity: 0.9 }}>
-                              Cập nhật lúc: {lastUpdatedPA}
-                            </span>
-                          </div>
-                        )}
-                      </h3>
-                      <div className="smc-list" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", maxHeight: "400px", overflowY: "auto" }}>
-                        {data.advancedAnalysis.patterns.length > 0 ? (
-                          data.advancedAnalysis.patterns.slice().reverse().map((pattern, i) => (
-                            <div key={`pattern-${i}`} className="smc-row-item" style={{ borderLeft: `4px solid ${pattern.type === "BULLISH" ? "var(--green)" : "var(--red)"}`, margin: 0 }}>
-                              <div className="smc-row-header">
-                                <span className={`smc-badge ${pattern.type === "BULLISH" ? "bullish" : "bearish"}`}>
-                                  {pattern.type === "BULLISH" ? "📈 BUY ALERT" : "📉 SELL ALERT"}
-                                </span>
-                                <span style={{ fontSize: "11px", fontWeight: "bold", color: "#fff" }}>{pattern.name}</span>
-                              </div>
-                              <p className="smc-desc" style={{ marginTop: "4px", fontSize: "11.5px" }}>
-                                {pattern.description}
-                              </p>
-                              <span style={{ fontSize: "9px", color: "var(--text3)", fontFamily: "monospace", alignSelf: "flex-end" }}>
-                                {new Date(pattern.time * 1000).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+                    <div className="smc-card" style={{ gridColumn: "span 2", transition: "all 0.3s ease" }}>
+                      <h3 
+                        className="smc-card-title" 
+                        style={{ 
+                          display: "flex", 
+                          justifyContent: "space-between", 
+                          alignItems: "center", 
+                          width: "100%", 
+                          flexWrap: "wrap", 
+                          gap: "8px",
+                          cursor: "pointer",
+                          userSelect: "none"
+                        }}
+                        onClick={() => setShowPaDetails(!showPaDetails)}
+                      >
+                        <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span>🕯️ Tổng Hợp Price Action & Mô Hình Nến Đảo Chiều (A.I)</span>
+                          {lastUpdatedPA && (
+                            <div className="live-update-badge" style={{ display: "inline-flex", margin: 0 }}>
+                              <span className="pulse-dot"></span>
+                              <span style={{ fontSize: "10px", color: "var(--green)", fontWeight: "normal", opacity: 0.9 }}>
+                                {lastUpdatedPA}
                               </span>
                             </div>
-                          ))
-                        ) : (
-                          <div style={{ textAlign: "center", color: "var(--text3)", padding: "20px", gridColumn: "span 2" }}>Chưa ghi nhận hành vi nến đặc trưng trong dữ liệu.</div>
-                        )}
-                      </div>
+                          )}
+                        </span>
+                        <span style={{ fontSize: "11px", color: "var(--gold)", fontWeight: "bold" }}>
+                          {showPaDetails ? "▲ ẨN CHI TIẾT" : "▼ XEM CHI TIẾT"}
+                        </span>
+                      </h3>
+                      {showPaDetails && (
+                        <div className="smc-list" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", maxHeight: "400px", overflowY: "auto" }}>
+                          {data.advancedAnalysis.patterns.length > 0 ? (
+                            data.advancedAnalysis.patterns.slice().reverse().map((pattern, i) => (
+                              <div key={`pattern-${i}`} className="smc-row-item" style={{ borderLeft: `4px solid ${pattern.type === "BULLISH" ? "var(--green)" : "var(--red)"}`, margin: 0 }}>
+                                <div className="smc-row-header">
+                                  <span className={`smc-badge ${pattern.type === "BULLISH" ? "bullish" : "bearish"}`}>
+                                    {pattern.type === "BULLISH" ? "📈 BUY ALERT" : "📉 SELL ALERT"}
+                                  </span>
+                                  <span style={{ fontSize: "11px", fontWeight: "bold", color: "#fff" }}>{pattern.name}</span>
+                                </div>
+                                <p className="smc-desc" style={{ marginTop: "4px", fontSize: "11.5px" }}>
+                                  {pattern.description}
+                                </p>
+                                <span style={{ fontSize: "9px", color: "var(--text3)", fontFamily: "monospace", alignSelf: "flex-end" }}>
+                                  {new Date(pattern.time * 1000).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              </div>
+                            ))
+                          ) : (
+                            <div style={{ textAlign: "center", color: "var(--text3)", padding: "20px", gridColumn: "span 2" }}>Chưa ghi nhận hành vi nến đặc trưng trong dữ liệu.</div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
-                    <div className="smc-card" style={{ gridColumn: "span 2" }}>
-                      <h3 className="smc-card-title">🏹 Tín Hiệu Chỉ Báo Động Lượng & Quét Thanh Khoản</h3>
-                      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "16px", marginTop: "8px" }}>
-                        
-                        {/* Indicators Column */}
-                        {data.tradingViewAnalysis && (
-                          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                            {/* ADX */}
-                            <div className="indicator-gauge-card" style={{ padding: "8px", borderRadius: "4px" }}>
-                              <div className="gauge-meta" style={{ marginBottom: "4px" }}>
-                                <span className="gauge-lbl" style={{ fontSize: "10px" }}>ADX Trend</span>
-                                <span className="gauge-val" style={{ fontSize: "11px", color: "var(--gold)" }}>{data.tradingViewAnalysis.adx.toFixed(1)}</span>
+                    <div className="smc-card" style={{ gridColumn: "span 2", transition: "all 0.3s ease" }}>
+                      <h3 
+                        className="smc-card-title"
+                        style={{ 
+                          cursor: "pointer", 
+                          display: "flex", 
+                          justifyContent: "space-between", 
+                          alignItems: "center",
+                          userSelect: "none" 
+                        }}
+                        onClick={() => setShowIndicatorsDetails(!showIndicatorsDetails)}
+                      >
+                        <span>🏹 Tín Hiệu Chỉ Báo Động Lượng & Quét Thanh Khoản</span>
+                        <span style={{ fontSize: "11px", color: "var(--gold)", fontWeight: "bold" }}>
+                          {showIndicatorsDetails ? "▲ ẨN CHI TIẾT" : "▼ XEM CHI TIẾT"}
+                        </span>
+                      </h3>
+                      {showIndicatorsDetails && (
+                        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "16px", marginTop: "8px" }}>
+                          {/* Indicators Column */}
+                          {data.tradingViewAnalysis && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                              {/* ADX */}
+                              <div className="indicator-gauge-card" style={{ padding: "8px", borderRadius: "4px" }}>
+                                <div className="gauge-meta" style={{ marginBottom: "4px" }}>
+                                  <span className="gauge-lbl" style={{ fontSize: "10px" }}>ADX Trend</span>
+                                  <span className="gauge-val" style={{ fontSize: "11px", color: "var(--gold)" }}>{data.tradingViewAnalysis.adx.toFixed(1)}</span>
+                                </div>
+                                <div className="gauge-track" style={{ height: "4px" }}>
+                                  <div className="gauge-fill" style={{ width: `${Math.min(100, data.tradingViewAnalysis.adx * 2)}%`, background: "var(--gold)" }}></div>
+                                </div>
                               </div>
-                              <div className="gauge-track" style={{ height: "4px" }}>
-                                <div className="gauge-fill" style={{ width: `${Math.min(100, data.tradingViewAnalysis.adx * 2)}%`, background: "var(--gold)" }}></div>
+                              {/* CCI */}
+                              <div className="indicator-gauge-card" style={{ padding: "8px", borderRadius: "4px" }}>
+                                <div className="gauge-meta" style={{ marginBottom: "4px" }}>
+                                  <span className="gauge-lbl" style={{ fontSize: "10px" }}>CCI(20)</span>
+                                  <span className="gauge-val" style={{ fontSize: "11px", color: data.tradingViewAnalysis.cci20 > 100 ? "var(--red)" : data.tradingViewAnalysis.cci20 < -100 ? "var(--green)" : "#fff" }}>{data.tradingViewAnalysis.cci20.toFixed(0)}</span>
+                                </div>
+                                <div className="gauge-track" style={{ height: "4px" }}>
+                                  <div className="gauge-fill" style={{ width: `${Math.max(5, Math.min(100, ((data.tradingViewAnalysis.cci20 + 200) / 400) * 100))}%`, background: data.tradingViewAnalysis.cci20 > 100 ? "var(--red)" : data.tradingViewAnalysis.cci20 < -100 ? "var(--green)" : "var(--blue)" }}></div>
+                                </div>
+                              </div>
+                              {/* Stochastic */}
+                              <div className="indicator-gauge-card" style={{ padding: "8px", borderRadius: "4px" }}>
+                                <div className="gauge-meta" style={{ marginBottom: "4px" }}>
+                                  <span className="gauge-lbl" style={{ fontSize: "10px" }}>Stoch (K/D)</span>
+                                  <span className="gauge-val" style={{ fontSize: "11px", color: "var(--blue)" }}>{data.tradingViewAnalysis.stochK.toFixed(0)}/{data.tradingViewAnalysis.stochD.toFixed(0)}</span>
+                                </div>
+                                <div className="gauge-track" style={{ height: "4px" }}>
+                                  <div className="gauge-fill" style={{ width: `${data.tradingViewAnalysis.stochK}%`, background: "var(--blue)" }}></div>
+                                </div>
                               </div>
                             </div>
-                            {/* CCI */}
-                            <div className="indicator-gauge-card" style={{ padding: "8px", borderRadius: "4px" }}>
-                              <div className="gauge-meta" style={{ marginBottom: "4px" }}>
-                                <span className="gauge-lbl" style={{ fontSize: "10px" }}>CCI(20)</span>
-                                <span className="gauge-val" style={{ fontSize: "11px", color: data.tradingViewAnalysis.cci20 > 100 ? "var(--red)" : data.tradingViewAnalysis.cci20 < -100 ? "var(--green)" : "#fff" }}>{data.tradingViewAnalysis.cci20.toFixed(0)}</span>
-                              </div>
-                              <div className="gauge-track" style={{ height: "4px" }}>
-                                <div className="gauge-fill" style={{ width: `${Math.max(5, Math.min(100, ((data.tradingViewAnalysis.cci20 + 200) / 400) * 100))}%`, background: data.tradingViewAnalysis.cci20 > 100 ? "var(--red)" : data.tradingViewAnalysis.cci20 < -100 ? "var(--green)" : "var(--blue)" }}></div>
-                              </div>
-                            </div>
-                            {/* Stochastic */}
-                            <div className="indicator-gauge-card" style={{ padding: "8px", borderRadius: "4px" }}>
-                              <div className="gauge-meta" style={{ marginBottom: "4px" }}>
-                                <span className="gauge-lbl" style={{ fontSize: "10px" }}>Stoch (K/D)</span>
-                                <span className="gauge-val" style={{ fontSize: "11px", color: "var(--blue)" }}>{data.tradingViewAnalysis.stochK.toFixed(0)}/{data.tradingViewAnalysis.stochD.toFixed(0)}</span>
-                              </div>
-                              <div className="gauge-track" style={{ height: "4px" }}>
-                                <div className="gauge-fill" style={{ width: `${data.tradingViewAnalysis.stochK}%`, background: "var(--blue)" }}></div>
-                              </div>
-                            </div>
+                          )}
+
+                          {/* Sweeps Column */}
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "170px", overflowY: "auto" }}>
+                            <span style={{ fontSize: "11px", fontWeight: "bold", color: "var(--gold)", display: "block", marginBottom: "4px" }}>🏹 Quét Thanh Khoản (Sweeps)</span>
+                            {data.advancedAnalysis.sweeps.length > 0 ? (
+                              data.advancedAnalysis.sweeps.slice(-3).reverse().map((sweep, i) => (
+                                <div key={`sw-${i}`} style={{ background: "rgba(0, 176, 255, 0.04)", border: "1px solid rgba(0, 176, 255, 0.15)", borderRadius: "4px", padding: "6px", fontSize: "10.5px" }}>
+                                  <div style={{ color: "var(--blue)", fontWeight: "bold", fontSize: "9px" }}>{sweep.type} Sweep</div>
+                                  <div style={{ margin: "2px 0", color: "#fff" }}>Mức quét: ${sweep.price.toFixed(2)}</div>
+                                </div>
+                              ))
+                            ) : (
+                              <span style={{ fontSize: "10px", color: "var(--text3)" }}>Chưa quét thanh khoản.</span>
+                            )}
                           </div>
-                        )}
 
-                        {/* Sweeps Column */}
-                        <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "170px", overflowY: "auto" }}>
-                          <span style={{ fontSize: "11px", fontWeight: "bold", color: "var(--gold)", display: "block", marginBottom: "4px" }}>🏹 Quét Thanh Khoản (Sweeps)</span>
-                          {data.advancedAnalysis.sweeps.length > 0 ? (
-                            data.advancedAnalysis.sweeps.slice(-3).reverse().map((sweep, i) => (
-                              <div key={`sw-${i}`} style={{ background: "rgba(0, 176, 255, 0.04)", border: "1px solid rgba(0, 176, 255, 0.15)", borderRadius: "4px", padding: "6px", fontSize: "10.5px" }}>
-                                <div style={{ color: "var(--blue)", fontWeight: "bold", fontSize: "9px" }}>{sweep.type} Sweep</div>
-                                <div style={{ margin: "2px 0", color: "#fff" }}>Mức quét: ${sweep.price.toFixed(2)}</div>
-                              </div>
-                            ))
-                          ) : (
-                            <span style={{ fontSize: "10px", color: "var(--text3)" }}>Chưa quét thanh khoản.</span>
-                          )}
+                          {/* BOS / CHoCH Column */}
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "170px", overflowY: "auto" }}>
+                            <span style={{ fontSize: "11px", fontWeight: "bold", color: "var(--gold)", display: "block", marginBottom: "4px" }}>🧬 Phá Cấu Trúc (BOS/CHoCH)</span>
+                            {data.advancedAnalysis.structureShifts.length > 0 ? (
+                              data.advancedAnalysis.structureShifts.slice(-3).reverse().map((shift, i) => (
+                                <div key={`sh-${i}`} style={{ background: "rgba(0, 230, 118, 0.02)", border: `1px solid ${shift.direction === "BULLISH" ? "rgba(0, 230, 118, 0.15)" : "rgba(255, 23, 68, 0.15)"}`, borderRadius: "4px", padding: "6px", fontSize: "10.5px" }}>
+                                  <div style={{ color: shift.direction === "BULLISH" ? "var(--green)" : "var(--red)", fontWeight: "bold", fontSize: "9px" }}>{shift.type} ({shift.direction})</div>
+                                  <div style={{ margin: "2px 0", color: "#fff" }}>Giá phá: ${shift.price.toFixed(2)}</div>
+                                </div>
+                              ))
+                            ) : (
+                              <span style={{ fontSize: "10px", color: "var(--text3)" }}>Chưa phá cấu trúc.</span>
+                            )}
+                          </div>
                         </div>
-
-                        {/* BOS / CHoCH Column */}
-                        <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "170px", overflowY: "auto" }}>
-                          <span style={{ fontSize: "11px", fontWeight: "bold", color: "var(--gold)", display: "block", marginBottom: "4px" }}>🧬 Phá Cấu Trúc (BOS/CHoCH)</span>
-                          {data.advancedAnalysis.structureShifts.length > 0 ? (
-                            data.advancedAnalysis.structureShifts.slice(-3).reverse().map((shift, i) => (
-                              <div key={`sh-${i}`} style={{ background: "rgba(0, 230, 118, 0.02)", border: `1px solid ${shift.direction === "BULLISH" ? "rgba(0, 230, 118, 0.15)" : "rgba(255, 23, 68, 0.15)"}`, borderRadius: "4px", padding: "6px", fontSize: "10.5px" }}>
-                                <div style={{ color: shift.direction === "BULLISH" ? "var(--green)" : "var(--red)", fontWeight: "bold", fontSize: "9px" }}>{shift.type} ({shift.direction})</div>
-                                <div style={{ margin: "2px 0", color: "#fff" }}>Giá phá: ${shift.price.toFixed(2)}</div>
-                              </div>
-                            ))
-                          ) : (
-                            <span style={{ fontSize: "10px", color: "var(--text3)" }}>Chưa phá cấu trúc.</span>
-                          )}
-                        </div>
-                      </div>
+                      )}
                     </div>
 
                   </div>
@@ -3616,7 +3657,7 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                             (() => {
                               let currentDayStr = "";
                               return filteredClosedTrades.map((t, idx) => {
-                                const tradeDayStr = new Date(t.closeTime).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" });
+                                const tradeDayStr = getLocalDateString(t.closeTime);
                                 const showDayHeader = currentDayStr !== tradeDayStr;
                                 if (showDayHeader) {
                                   currentDayStr = tradeDayStr;
@@ -3793,4 +3834,3 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
     </div>
   );
 }
-

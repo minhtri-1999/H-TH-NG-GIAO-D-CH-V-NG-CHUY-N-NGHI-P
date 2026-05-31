@@ -48,11 +48,20 @@ try {
       return { ok: true };
     },
     list(selector: { prefix: unknown[] }) {
-      const prefixStr = JSON.stringify(selector.prefix).slice(0, -1);
       const results: any[] = [];
-      for (const [k, v] of store.entries()) {
-        if (k.startsWith(prefixStr)) {
-          results.push({ key: JSON.parse(k), value: v });
+      for (const [kStr, v] of store.entries()) {
+        const k = JSON.parse(kStr);
+        if (Array.isArray(k) && k.length >= selector.prefix.length) {
+          let match = true;
+          for (let i = 0; i < selector.prefix.length; i++) {
+            if (k[i] !== selector.prefix[i]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) {
+            results.push({ key: k, value: v });
+          }
         }
       }
       return {

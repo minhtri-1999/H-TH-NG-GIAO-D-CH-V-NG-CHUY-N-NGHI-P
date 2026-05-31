@@ -15,27 +15,8 @@ app.onError((err, c) => {
   return c.text("Server Error: " + err.message, 500);
 });
 
-// Middleware to protect sensitive XAU/USD data APIs (blocking unauthorized access)
+// Middleware to protect sensitive XAU/USD data APIs (bypassed for public access)
 app.use("/api/*", async (c, next) => {
-  const path = c.req.path;
-  
-  // Public auth paths do NOT require authentication check
-  if (path.startsWith("/api/auth/") || path === "/api/test-coinbase") {
-    return await next();
-  }
-
-  const sessionId = getCookie(c, "sessionId");
-  if (!sessionId) {
-    return c.json({ error: "Unauthorized. Vui lòng đăng ký/đăng nhập." }, 401);
-  }
-
-  const session = await getSession(sessionId);
-  if (!session) {
-    deleteCookie(c, "sessionId", { path: "/" });
-    return c.json({ error: "Unauthorized. Phiên làm việc đã hết hạn." }, 401);
-  }
-
-  // Session is valid, continue
   return await next();
 });
 

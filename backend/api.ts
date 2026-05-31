@@ -39,7 +39,7 @@ let reqCount = 0;
 let windowStart = Date.now();
 function checkRate(): boolean {
   if (Date.now() - windowStart > 60_000) { reqCount = 0; windowStart = Date.now(); }
-  if (reqCount >= 40) return false;
+  if (reqCount >= 300) return false; // Increased rate limit to 300 requests per minute
   reqCount++;
   return true;
 }
@@ -107,7 +107,7 @@ function getIntervalInSeconds(timeframe: string): number {
 }
 
 // GET GOLD OHLC (Main function)
-export async function getGoldChartData(timeframe: string): Promise<GoldChartResult> {
+export async function getGoldChartData(timeframe: string, bypassRateLimit = false): Promise<GoldChartResult> {
   const apiTf = TF_MAP[timeframe] || "D1";
   const cacheKey = `gold_chart:${apiTf}`;
   const cached = getCached<GoldChartResult>(cacheKey);
@@ -126,7 +126,7 @@ export async function getGoldChartData(timeframe: string): Promise<GoldChartResu
     }
   }
 
-  if (!checkRate()) {
+  if (!bypassRateLimit && !checkRate()) {
     // If rate limit exceeded but we have cache (even if old candle), return cached instead of erroring
     if (cached) {
       console.warn("Rate limit exceeded for new candle fetch. Returning stale cache fallback.");
@@ -212,66 +212,87 @@ const COINBASE_GRANULARITY: Record<string, number> = {
   "1M": 86400,
 };
 
+const YAHOO_INTERVALS: Record<string, { interval: string; range: string }> = {
+  "1": { interval: "1m", range: "5d" },
+  "M1": { interval: "1m", range: "5d" },
+  "5": { interval: "5m", range: "5d" },
+  "M5": { interval: "5m", range: "5d" },
+  "15": { interval: "15m", range: "5d" },
+  "M15": { interval: "15m", range: "5d" },
+  "60": { interval: "1h", range: "1mo" },
+  "H1": { interval: "1h", range: "1mo" },
+  "1D": { interval: "1d", range: "1y" },
+  "D1": { interval: "1d", range: "1y" },
+  "1W": { interval: "1wk", range: "5y" },
+  "W1": { interval: "1wk", range: "5y" },
+  "1M": { interval: "1mo", range: "10y" },
+  "MN1": { interval: "1mo", range: "10y" },
+};
+
 async function getYahooFinanceGoldFallback(timeframe: string, cacheKey: string, currentCandleOpen: number): Promise<GoldChartResult> {
-  const granularity = COINBASE_GRANULARITY[timeframe] || 86400;
-  const url = `https://api.exchange.coinbase.com/products/PAXG-USD/candles?granularity=${granularity}`;
-
-  const resp = await fetch(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    }
-  });
-
-  if (!resp.ok) {
-    throw new Error(`Không thể lấy dữ liệu biểu đồ Vàng từ RapidAPI lẫn nguồn Fallback Coinbase: ${resp.statusText}`);
-  }
-
-  const json = await resp.json();
-  if (!Array.isArray(json) || json.length === 0) {
-    throw new Error("Dữ liệu biểu đồ từ Coinbase trống hoặc lỗi");
-  }
-
-  // Coinbase returns candles in reverse chronological order (newest first). Let's sort them chronologically (oldest first).
-  const sorted = [...json].sort((a, b) => a[0] - b[0]);
-
-  // Fetch true FOREXCOM price to calculate the normalization offset (spread delta)
-  let offset = 0;
+  const mapping = YAHOO_INTERVALS[timeframe] || { interval: "1d", range: "1y" };
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=${mapping.interval}&range=${mapping.range}`;
+  
   try {
-    const realTime = await getGoldRealtimePrice();
-    const lastClose = Number(sorted[sorted.length - 1][4]); // close price
-    offset = realTime.price - lastClose;
-  } catch (e) {
-    console.error("Failed to calculate offset", e);
-  }
-
-  const clean: GoldChartResult = { timestamp: [], open: [], high: [], low: [], close: [], volume: [] };
-  for (const candle of sorted) {
-    const t = Number(candle[0]);
-    const l = Number(candle[1]);
-    const h = Number(candle[2]);
-    const o = Number(candle[3]);
-    const c = Number(candle[4]);
-    const v = Number(candle[5]);
-
-    if (!isNaN(t) && !isNaN(o) && !isNaN(h) && !isNaN(l) && !isNaN(c)) {
-      clean.timestamp.push(t);
-      clean.open.push(o + offset);
-      clean.high.push(h + offset);
-      clean.low.push(l + offset);
-      clean.close.push(c + offset);
-      clean.volume.push(v);
+    const resp = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      }
+    });
+    
+    if (!resp.ok) {
+      throw new Error(`Yahoo Finance HTTP ${resp.status}: ${await resp.text()}`);
     }
+    
+    const data = await resp.json();
+    const result = data.chart?.result?.[0];
+    if (!result) {
+      throw new Error("No chart result found in Yahoo Finance response");
+    }
+    
+    const clean: GoldChartResult = { timestamp: [], open: [], high: [], low: [], close: [], volume: [] };
+    const ts = result.timestamp || [];
+    const quote = result.indicators?.quote?.[0];
+    
+    if (ts.length === 0 || !quote) {
+      throw new Error("Empty chart data from Yahoo Finance");
+    }
+    
+    for (let i = 0; i < ts.length; i++) {
+      const t = ts[i];
+      const o = quote.open[i];
+      const h = quote.high[i];
+      const l = quote.low[i];
+      const c = quote.close[i];
+      const v = quote.volume?.[i] || 0;
+      
+      if (t && o !== null && h !== null && l !== null && c !== null && !isNaN(o) && !isNaN(h) && !isNaN(l) && !isNaN(c)) {
+        clean.timestamp.push(t);
+        clean.open.push(o);
+        clean.high.push(h);
+        clean.low.push(l);
+        clean.close.push(c);
+        clean.volume.push(v);
+      }
+    }
+    
+    if (clean.timestamp.length === 0) {
+      throw new Error("No valid candles after cleaning");
+    }
+    
+    const lastCandleTime = clean.timestamp[clean.timestamp.length - 1];
+    let ttl = ["1", "5"].includes(timeframe) ? 10_000 : 60_000;
+    if (lastCandleTime && lastCandleTime < currentCandleOpen) {
+      console.log(`[Yahoo Pending] Timeframe ${timeframe} waiting for candle ${currentCandleOpen}. Setting short 1.5s cache.`);
+      ttl = 1500;
+    }
+    
+    setCache(cacheKey, clean, ttl);
+    return clean;
+  } catch (err: any) {
+    console.error("Failed to fetch from Yahoo Finance Chart:", err);
+    throw new Error(`Yahoo Finance error: ${err.message}`);
   }
-
-  const lastCandleTime = clean.timestamp[clean.timestamp.length - 1];
-  let ttl = ["1", "5"].includes(timeframe) ? 10_000 : 60_000;
-  if (lastCandleTime && lastCandleTime < currentCandleOpen) {
-    console.log(`[Coinbase Pending] Timeframe ${timeframe} waiting for candle ${currentCandleOpen} to be registered. Setting short 1.5s cache.`);
-    ttl = 1500;
-  }
-
-  setCache(cacheKey, clean, ttl);
-  return clean;
 }
 
 export interface TradingViewRealtime {
@@ -306,7 +327,10 @@ async function fetchBaseGoldRealtime(): Promise<TradingViewRealtime> {
     const tvUrl = "https://scanner.tradingview.com/cfd/scan";
     const tvResp = await fetch(tvUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      },
       body: JSON.stringify({
         symbols: { tickers: ["FOREXCOM:XAUUSD"] },
         columns: [
@@ -368,42 +392,97 @@ async function fetchBaseGoldRealtime(): Promise<TradingViewRealtime> {
     console.error("Error fetching TV quote:", e);
   }
 
-  // Fallback to PAXGUSDT if TV fails
-  const url = `https://api.binance.com/api/v3/ticker/24hr?symbol=PAXGUSDT`;
+  // Fallback: Yahoo Finance Chart GC=F Meta Block
   try {
-    const resp = await fetch(url);
+    const url = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d";
+    const resp = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      }
+    });
+    
     if (resp.ok) {
       const data = await resp.json();
-      const price = Number(data.lastPrice) || 2350.00;
-      return {
-        price,
-        change: Number(data.priceChangePercent) || 0.0,
-        high: Number(data.highPrice) || 2360.00,
-        low: Number(data.lowPrice) || 2340.00,
-        time: Date.now(),
-        rsi: 50,
-        macd: 0,
-        macdSignal: 0,
-        ema10: price,
-        sma20: price,
-        recommendAll: 0,
-        recommendMA: 0,
-        recommendOther: 0,
-        ema20: price,
-        ema50: price,
-        ema100: price,
-        ema200: price,
-        adx: 20,
-        cci20: 0,
-        stochK: 50,
-        stochD: 50,
-        atr: 3.5,
-      };
+      const meta = data.chart?.result?.[0]?.meta;
+      if (meta) {
+        const price = Number(meta.regularMarketPrice);
+        if (price && price > 0) {
+          const prevClose = Number(meta.previousClose) || Number(meta.chartPreviousClose) || price;
+          const change = ((price - prevClose) / prevClose) * 100;
+          const high = Number(meta.regularMarketDayHigh) || price;
+          const low = Number(meta.regularMarketDayLow) || price;
+          console.log(`[Yahoo Fallback] Successfully fetched GC=F live price: ${price} USD`);
+          
+          return {
+            price,
+            change,
+            high,
+            low,
+            time: Date.now(),
+            rsi: 50,
+            macd: 0,
+            macdSignal: 0,
+            ema10: price,
+            sma20: price,
+            recommendAll: 0,
+            recommendMA: 0,
+            recommendOther: 0,
+            ema20: price,
+            ema50: price,
+            ema100: price,
+            ema200: price,
+            adx: 20,
+            cci20: 0,
+            stochK: 50,
+            stochD: 50,
+            atr: 3.5,
+          };
+        }
+      }
     }
-  } catch (e) {
-    console.error("Error fetching gold realtime quote:", e);
+  } catch (err) {
+    console.error("Failed to fetch live price from Yahoo Finance:", err);
   }
 
+  // Secondary Fallback: Binance US API (US friendly - never geoblocks Deno Deploy)
+  const binanceUrl = `https://api.binance.us/api/v3/ticker/24hr?symbol=PAXGUSDT`;
+  try {
+    const resp = await fetch(binanceUrl);
+    if (resp.ok) {
+      const data = await resp.json();
+      const price = Number(data.lastPrice);
+      if (price && price > 0) {
+        return {
+          price,
+          change: Number(data.priceChangePercent) || 0.0,
+          high: Number(data.highPrice) || price,
+          low: Number(data.lowPrice) || price,
+          time: Date.now(),
+          rsi: 50,
+          macd: 0,
+          macdSignal: 0,
+          ema10: price,
+          sma20: price,
+          recommendAll: 0,
+          recommendMA: 0,
+          recommendOther: 0,
+          ema20: price,
+          ema50: price,
+          ema100: price,
+          ema200: price,
+          adx: 20,
+          cci20: 0,
+          stochK: 50,
+          stochD: 50,
+          atr: 3.5,
+        };
+      }
+    }
+  } catch (e) {
+    console.error("Error fetching gold from Binance.us:", e);
+  }
+
+  // Dead fallback (last resort)
   const defaultPrice = 2350.00;
   return {
     price: defaultPrice,

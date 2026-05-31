@@ -26,7 +26,7 @@ export async function seedBacktestHistory(): Promise<ClosedTrade[]> {
 
   for (const tf of timeframes) {
     try {
-      const chartRaw = await getGoldChartData(tf);
+      const chartRaw = await getGoldChartData(tf, true); // Bypass rate limit for internal backtest seeding
       const lastChartClose = chartRaw.close.length > 0 ? chartRaw.close[chartRaw.close.length - 1] : 0;
       const offset = lastChartClose > 0 ? rt.price - lastChartClose : 0;
 
