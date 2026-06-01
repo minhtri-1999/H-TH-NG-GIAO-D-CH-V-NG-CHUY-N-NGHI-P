@@ -317,7 +317,7 @@ export default function App() {
   };
 
   // Authentication States
-  const [user, setUser] = useState<{ email: string } | null>({ email: "guest@goldterminal.pro" });
+  const [user, setUser] = useState<{ email: string } | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [authMode, setAuthMode] = useState<"login" | "register" | "otp">("login");
   const [authEmail, setAuthEmail] = useState<string>("");
@@ -382,8 +382,25 @@ export default function App() {
   };
 
   const checkSession = async () => {
-    setUser({ email: "guest@goldterminal.pro" });
-    setAuthLoading(false);
+    try {
+      setAuthLoading(true);
+      const resp = await fetch("/api/auth/me");
+      if (resp.ok) {
+        const d = await resp.json();
+        if (d.authenticated && d.email) {
+          setUser({ email: d.email });
+        } else {
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
+    } catch (err) {
+      console.error("Session check error:", err);
+      setUser(null);
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
   useEffect(() => {
