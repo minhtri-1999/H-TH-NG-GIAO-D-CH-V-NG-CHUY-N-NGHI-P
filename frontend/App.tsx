@@ -3499,25 +3499,6 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                           </p>
                         </div>
                       </div>
-                      <button
-                        className="modal-btn apply"
-                        onClick={handleResetBacktest}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                          background: "var(--gold)",
-                          color: "#000",
-                          fontWeight: "bold",
-                          border: "none",
-                          borderRadius: "6px",
-                          padding: "8px 16px",
-                          cursor: "pointer",
-                          transition: "all 0.2s"
-                        }}
-                      >
-                        🔄 Đồng Bộ & Làm Mới Lịch Sử SMC
-                      </button>
                     </div>
 
                     {/* Filter Panel (Timeframe & Day Filter Sub-tabs) */}
