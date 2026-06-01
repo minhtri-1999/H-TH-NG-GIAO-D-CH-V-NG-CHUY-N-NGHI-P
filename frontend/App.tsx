@@ -287,7 +287,6 @@ export default function App() {
   }, [filteredClosedTrades]);
 
   const fetchBacktestHistory = async (showLoading = false) => {
-    if (showLoading) setBacktestLoading(true);
     try {
       const resp = await fetch("/api/backtest/history");
       if (resp.ok) {
@@ -298,13 +297,10 @@ export default function App() {
       }
     } catch (err) {
       console.error("Error fetching backtest history:", err);
-    } finally {
-      if (showLoading) setBacktestLoading(false);
     }
   };
 
   const handleResetBacktest = async () => {
-    setBacktestLoading(true);
     try {
       const resp = await fetch("/api/backtest/reset", { method: "POST" });
       if (resp.ok) {
@@ -313,12 +309,10 @@ export default function App() {
           setClosedTrades(d.trades);
         }
       } else {
-        alert("Lỗi khi chạy lại backtest từ dữ liệu nến.");
+        alert("Lỗi khi đồng bộ lại dữ liệu nến.");
       }
     } catch (err: any) {
       alert("Lỗi hệ thống: " + err.message);
-    } finally {
-      setBacktestLoading(false);
     }
   };
 
@@ -3508,7 +3502,6 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                       <button
                         className="modal-btn apply"
                         onClick={handleResetBacktest}
-                        disabled={backtestLoading}
                         style={{
                           display: "flex",
                           alignItems: "center",
@@ -3520,11 +3513,10 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                           borderRadius: "6px",
                           padding: "8px 16px",
                           cursor: "pointer",
-                          opacity: backtestLoading ? 0.6 : 1,
                           transition: "all 0.2s"
                         }}
                       >
-                        {backtestLoading ? "⏳ Đang chạy Backtest..." : "🔄 Chạy Lại Backtest Thực Tế"}
+                        🔄 Đồng Bộ & Làm Mới Lịch Sử SMC
                       </button>
                     </div>
 
@@ -3597,19 +3589,19 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                        <div style={{ background: "rgba(255,255,255,0.02)", padding: "16px", borderRadius: "8px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "4px" }}>
                         <span style={{ fontSize: "10px", color: "var(--text3)", fontWeight: "bold", textTransform: "uppercase" }}>Tổng lệnh chốt</span>
                         <strong style={{ fontSize: "20px", color: "#fff", fontFamily: "monospace" }}>
-                          {backtestLoading && closedTrades.length === 0 ? "⏳ ..." : backtestStats.total}
+                          {backtestStats.total}
                         </strong>
                       </div>
                       <div style={{ background: "rgba(255,255,255,0.02)", padding: "16px", borderRadius: "8px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "4px" }}>
                         <span style={{ fontSize: "10px", color: "var(--text3)", fontWeight: "bold", textTransform: "uppercase" }}>Tỷ Lệ Thắng (Win Rate)</span>
                         <strong style={{ fontSize: "20px", color: backtestStats.winRate >= 50 ? "var(--green)" : "var(--yellow)", fontFamily: "monospace" }}>
-                          {backtestLoading && closedTrades.length === 0 ? "⏳ ..." : `${backtestStats.winRate}%`}
+                          {`${backtestStats.winRate}%`}
                         </strong>
                       </div>
                       <div style={{ background: "rgba(255,255,255,0.02)", padding: "16px", borderRadius: "8px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "4px" }}>
                         <span style={{ fontSize: "10px", color: "var(--text3)", fontWeight: "bold", textTransform: "uppercase" }}>Pips Ròng tích lũy</span>
                         <strong style={{ fontSize: "20px", color: backtestStats.netPips >= 0 ? "var(--green)" : "var(--red)", fontFamily: "monospace" }}>
-                          {backtestLoading && closedTrades.length === 0 ? "⏳ ..." : `${backtestStats.netPips >= 0 ? "+" : ""}${backtestStats.netPips} pips`}
+                          {`${backtestStats.netPips >= 0 ? "+" : ""}${backtestStats.netPips} pips`}
                         </strong>
                       </div>
                     </div>
@@ -3693,7 +3685,7 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                           ) : (
                             <tr>
                               <td colSpan={11} style={{ padding: "20px", textAlign: "center", color: "var(--text3)" }}>
-                                {backtestLoading ? "Đang tiến hành chạy backtest trên dữ liệu nến thật..." : `Không có lịch sử giao dịch nào được ghi nhận cho khung thời gian ${backtestFilter}!`}
+                                Không có lịch sử giao dịch nào được ghi nhận cho khung thời gian {backtestFilter}!
                               </td>
                             </tr>
                           )}
