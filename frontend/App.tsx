@@ -568,7 +568,7 @@ export default function App() {
       await fetch("/api/auth/logout", { method: "POST" });
       setUser(null);
       setData(null);
-      setLivePrice(2350.00);
+      setLivePrice(4500.00);
       setLiveChange(0);
       setAuthMode("login");
       setAuthEmail("");
@@ -582,7 +582,7 @@ export default function App() {
   };
 
   // Millisecond ticker state
-  const [livePrice, setLivePrice] = useState<number>(2350.00);
+  const [livePrice, setLivePrice] = useState<number>(4500.00);
   const [liveChange, setLiveChange] = useState<number>(0.0);
   const [tickerActive, setTickerActive] = useState<boolean>(true);
   const [simulatedTrades, setSimulatedTrades] = useState<SimulatedTrade[]>([]);
@@ -838,7 +838,7 @@ export default function App() {
   }, [activeCandles, timeframe, yScaleMultiplier]);
 
   // Refs for tracking values inside ticker loop
-  const priceRef = useRef<number>(2350.00);
+  const priceRef = useRef<number>(4500.00);
   const dataRef = useRef<GoldSignalResponse | null>(null);
   const tickCounter = useRef<number>(0);
   const isDragging = useRef<boolean>(false);

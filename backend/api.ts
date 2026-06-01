@@ -2,11 +2,7 @@
 // With caching, rate limiting, and date range calculation
 
 export function adjustGoldPrice(raw: number): number {
-  if (raw > 3000) {
-    // Bring it back to realistic spot range of $2320 - $2410
-    return Math.round((raw - 2150) * 100) / 100;
-  }
-  return raw;
+  return Math.round(raw * 100) / 100;
 }
 
 const GOLD_HOST = "gold-price-xauusd-ohlc-api.p.rapidapi.com";
@@ -491,12 +487,12 @@ async function fetchBaseGoldRealtime(): Promise<TradingViewRealtime> {
   }
 
   // Dead fallback (last resort)
-  const defaultPrice = 2350.00;
+  const defaultPrice = 4500.00;
   return {
     price: defaultPrice,
     change: 0.12,
-    high: 2362.00,
-    low: 2345.00,
+    high: 4520.00,
+    low: 4480.00,
     time: Date.now(),
     rsi: 50,
     macd: 0,
