@@ -32,13 +32,24 @@ export async function seedBacktestHistory(): Promise<ClosedTrade[]> {
     // Fallback to default gold spot price
   }
 
-  const totalTrades = 35;
+  const totalTrades = 45; // Increased to 45 trades for maximum richness
   const now = Date.now();
 
   for (let i = 0; i < totalTrades; i++) {
-    // Distribute trades chronologically over the last 48 hours
-    const ageMs = (totalTrades - i) * (48 * 3600 * 1000 / totalTrades) - (Math.random() * 20 * 60 * 1000);
-    let closeTime = now - ageMs;
+    // We want to distribute trades heavily on TODAY (Hôm nay) to ensure a rich list of trades!
+    // Out of 45 trades:
+    // - 25 trades are placed TODAY (spread over the last 16 hours)
+    // - 20 trades are placed YESTERDAY (spread over the previous 24 hours, automatically shifted to Friday if weekend)
+    let closeTime = now;
+    if (i < 25) {
+      // TODAY: spread over the last 16 hours
+      const ageMs = (25 - i) * (16 * 3600 * 1000 / 25) - (Math.random() * 10 * 60 * 1000);
+      closeTime = now - ageMs;
+    } else {
+      // YESTERDAY: spread over 24 hours preceding today
+      const ageMs = 16 * 3600 * 1000 + (45 - i) * (24 * 3600 * 1000 / 20) - (Math.random() * 15 * 60 * 1000);
+      closeTime = now - ageMs;
+    }
 
     // Strict Weekend filter: Shift trades that fall on Saturday/Sunday to Friday
     const date = new Date(closeTime);
@@ -49,7 +60,8 @@ export async function seedBacktestHistory(): Promise<ClosedTrade[]> {
       closeTime -= 24 * 3600 * 1000;
     }
 
-    const durationMs = (15 + Math.random() * 65) * 60 * 1000;
+    // Ensure the duration of trades is realistic (e.g. 5 to 45 minutes)
+    const durationMs = (5 + Math.random() * 40) * 60 * 1000;
     const openTime = closeTime - durationMs;
 
     const tf = timeframes[i % timeframes.length];
@@ -62,7 +74,7 @@ export async function seedBacktestHistory(): Promise<ClosedTrade[]> {
     else if (tf === "D1") lotSize = 2.0;
 
     // Price entry aligns realistically with current actual gold price
-    const priceOffset = (Math.random() - 0.5) * 40; // range of +/- 20 USD
+    const priceOffset = (Math.random() - 0.5) * 30; // range of +/- 15 USD
     const entry = Math.round((rtPrice + priceOffset) * 100) / 100;
 
     // SMC high win rate (74% wins)
@@ -81,9 +93,9 @@ export async function seedBacktestHistory(): Promise<ClosedTrade[]> {
     let closePrice = 0;
 
     if (position === "BUY") {
-      stopLoss = Math.round((entry - (10 + Math.random() * 10)) * 100) / 100;
-      takeProfit1 = Math.round((entry + (12 + Math.random() * 8)) * 100) / 100;
-      takeProfit2 = Math.round((entry + (28 + Math.random() * 22)) * 100) / 100;
+      stopLoss = Math.round((entry - (6 + Math.random() * 8)) * 100) / 100;
+      takeProfit1 = Math.round((entry + (8 + Math.random() * 8)) * 100) / 100;
+      takeProfit2 = Math.round((entry + (18 + Math.random() * 12)) * 100) / 100;
 
       if (status === "TP2") {
         closePrice = takeProfit2;
@@ -96,9 +108,9 @@ export async function seedBacktestHistory(): Promise<ClosedTrade[]> {
         pips = Number(((stopLoss - entry) * 10).toFixed(1));
       }
     } else {
-      stopLoss = Math.round((entry + (10 + Math.random() * 10)) * 100) / 100;
-      takeProfit1 = Math.round((entry - (12 + Math.random() * 8)) * 100) / 100;
-      takeProfit2 = Math.round((entry - (28 + Math.random() * 22)) * 100) / 100;
+      stopLoss = Math.round((entry + (6 + Math.random() * 8)) * 100) / 100;
+      takeProfit1 = Math.round((entry - (8 + Math.random() * 8)) * 100) / 100;
+      takeProfit2 = Math.round((entry - (18 + Math.random() * 12)) * 100) / 100;
 
       if (status === "TP2") {
         closePrice = takeProfit2;

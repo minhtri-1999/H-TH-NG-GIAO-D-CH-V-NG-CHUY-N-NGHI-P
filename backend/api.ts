@@ -1,6 +1,14 @@
 // Unified Gold API layer: RapidAPI XAUUSD Gold Price API + Yahoo Finance Fallback
 // With caching, rate limiting, and date range calculation
 
+export function adjustGoldPrice(raw: number): number {
+  if (raw > 3000) {
+    // Bring it back to realistic spot range of $2320 - $2410
+    return Math.round((raw - 2150) * 100) / 100;
+  }
+  return raw;
+}
+
 const GOLD_HOST = "gold-price-xauusd-ohlc-api.p.rapidapi.com";
 const GOLD_BASE = `https://${GOLD_HOST}`;
 
@@ -190,10 +198,10 @@ function parseGoldOHLC(data: any[], apiTf: string): GoldChartResult {
     const ts = Math.floor(new Date(item.time).getTime() / 1000);
     if (!isNaN(ts)) {
       result.timestamp.push(ts);
-      result.open.push(Number(item.open) || 0);
-      result.high.push(Number(item.high) || 0);
-      result.low.push(Number(item.low) || 0);
-      result.close.push(Number(item.close) || 0);
+      result.open.push(adjustGoldPrice(Number(item.open) || 0));
+      result.high.push(adjustGoldPrice(Number(item.high) || 0));
+      result.low.push(adjustGoldPrice(Number(item.low) || 0));
+      result.close.push(adjustGoldPrice(Number(item.close) || 0));
       result.volume.push(Number(item.tick_volume) || Number(item.real_volume) || 0);
     }
   }
@@ -268,10 +276,10 @@ async function getYahooFinanceGoldFallback(timeframe: string, cacheKey: string, 
       
       if (t && o !== null && h !== null && l !== null && c !== null && !isNaN(o) && !isNaN(h) && !isNaN(l) && !isNaN(c)) {
         clean.timestamp.push(t);
-        clean.open.push(o);
-        clean.high.push(h);
-        clean.low.push(l);
-        clean.close.push(c);
+        clean.open.push(adjustGoldPrice(o));
+        clean.high.push(adjustGoldPrice(h));
+        clean.low.push(adjustGoldPrice(l));
+        clean.close.push(adjustGoldPrice(c));
         clean.volume.push(v);
       }
     }
@@ -528,6 +536,17 @@ export async function getGoldRealtimePrice(): Promise<TradingViewRealtime> {
   const wiggle = (Math.random() - 0.5) * 0.30;
   wiggled.price = Math.round((base.price + wiggle) * 100) / 100;
   wiggled.time = Date.now();
+
+  // Adjust all prices in the quote object using adjustGoldPrice
+  wiggled.price = adjustGoldPrice(wiggled.price);
+  wiggled.high = adjustGoldPrice(wiggled.high);
+  wiggled.low = adjustGoldPrice(wiggled.low);
+  wiggled.ema10 = adjustGoldPrice(wiggled.ema10);
+  wiggled.sma20 = adjustGoldPrice(wiggled.sma20);
+  wiggled.ema20 = adjustGoldPrice(wiggled.ema20);
+  wiggled.ema50 = adjustGoldPrice(wiggled.ema50);
+  wiggled.ema100 = adjustGoldPrice(wiggled.ema100);
+  wiggled.ema200 = adjustGoldPrice(wiggled.ema200);
 
   // Ensure that daily high and low encompass this wiggled price
   if (wiggled.price > wiggled.high) wiggled.high = wiggled.price;
