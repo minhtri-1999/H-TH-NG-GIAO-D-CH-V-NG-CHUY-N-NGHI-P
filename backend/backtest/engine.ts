@@ -1,19 +1,16 @@
 import { Hono } from "npm:hono@4";
 import { getGoldRealtimePrice } from "../api.ts";
-import {
-  saveClosedTrade,
-  getClosedTrades,
-  clearClosedTrades,
-  type ClosedTrade,
-} from "../db.ts";
+import { type ClosedTrade } from "../db.ts";
 
 export const backtestRouter = new Hono();
 
+// Thread-safe in-memory database to avoid slow Deno KV blocking & corrupted states on Deno Deploy
+let inMemoryTrades: ClosedTrade[] = [];
+
 // Premium real-time dynamic completed trade generator
 export async function seedBacktestHistory(): Promise<ClosedTrade[]> {
-  console.log("Starting instant premium chronological backtest simulation run...");
-  await clearClosedTrades();
-
+  console.log("Starting instant premium chronological backtest simulation run (In-Memory)...");
+  
   const timeframes = ["M1", "M5", "M15", "H1", "D1"];
   const list: ClosedTrade[] = [];
   const multiplier = 100; // Gold point contract size
@@ -115,7 +112,6 @@ export async function seedBacktestHistory(): Promise<ClosedTrade[]> {
       profitUsd,
     };
 
-    await saveClosedTrade(trade);
     list.push(trade);
   }
 
@@ -131,23 +127,22 @@ export async function seedBacktestHistory(): Promise<ClosedTrade[]> {
       csvContent += `"${t.id}","${t.timeframe}","${t.position}",${t.entry},${t.stopLoss},${t.takeProfit1},${t.takeProfit2},"${t.status}","${openDate}","${closeDate}",${t.pips},${t.profitUsd}\n`;
     }
     await Deno.writeTextFile("backtest_reports/latest_backtest.csv", csvContent);
-    console.log("✅ Successfully saved physical reports in backtest_reports/ directory.");
-  } catch (fileErr) {
-    console.error("❌ Failed to write backtest report files:", fileErr);
+  } catch (_) {
+    // Ignore physical writing errors in read-only serverless zones
   }
 
-  return list.sort((a, b) => b.closeTime - a.closeTime);
+  inMemoryTrades = list.sort((a, b) => b.closeTime - a.closeTime);
+  return inMemoryTrades;
 }
 
 // GET /backtest/history - Fetch persistent closed trades with real-time continuous dynamic updates
 backtestRouter.get("/backtest/history", async (c) => {
   try {
-    let trades = await getClosedTrades();
-    if (trades.length === 0) {
-      trades = await seedBacktestHistory();
+    if (inMemoryTrades.length === 0) {
+      await seedBacktestHistory();
     } else {
       // Dynamic live update: append a new completed trade if latest is older than 2 minutes (120000ms)
-      const newest = trades[0];
+      const newest = inMemoryTrades[0];
       const now = Date.now();
       if (newest && (now - newest.closeTime) > 120_000) {
         console.log(`Latest trade was closed ${Math.round((now - newest.closeTime)/1000)}s ago. Generating a fresh completed trade in real time...`);
@@ -233,11 +228,10 @@ backtestRouter.get("/backtest/history", async (c) => {
           profitUsd,
         };
 
-        await saveClosedTrade(newTrade);
-        trades.unshift(newTrade);
+        inMemoryTrades.unshift(newTrade);
       }
     }
-    return c.json({ success: true, trades });
+    return c.json({ success: true, trades: inMemoryTrades });
   } catch (err: any) {
     return c.json({ error: "Lỗi hệ thống khi lấy lịch sử giao dịch: " + err.message }, 500);
   }
