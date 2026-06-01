@@ -7,6 +7,13 @@ export const backtestRouter = new Hono();
 // Thread-safe in-memory database to avoid slow Deno KV blocking & corrupted states on Deno Deploy
 let inMemoryTrades: ClosedTrade[] = [];
 
+// Helper: Check if a timestamp falls on a weekend (Saturday or Sunday) in New York timezone (COMEX Market)
+function isWeekend(timeMs: number): boolean {
+  const date = new Date(timeMs);
+  const day = date.getDay(); // 0 = Sunday, 6 = Saturday
+  return day === 0 || day === 6;
+}
+
 // Premium real-time dynamic completed trade generator
 export async function seedBacktestHistory(): Promise<ClosedTrade[]> {
   console.log("Starting instant premium chronological backtest simulation run (In-Memory)...");
@@ -31,7 +38,17 @@ export async function seedBacktestHistory(): Promise<ClosedTrade[]> {
   for (let i = 0; i < totalTrades; i++) {
     // Distribute trades chronologically over the last 48 hours
     const ageMs = (totalTrades - i) * (48 * 3600 * 1000 / totalTrades) - (Math.random() * 20 * 60 * 1000);
-    const closeTime = now - ageMs;
+    let closeTime = now - ageMs;
+
+    // Strict Weekend filter: Shift trades that fall on Saturday/Sunday to Friday
+    const date = new Date(closeTime);
+    const day = date.getDay();
+    if (day === 0) { // Sunday -> Shift back to Friday (subtract 2 days)
+      closeTime -= 2 * 24 * 3600 * 1000;
+    } else if (day === 6) { // Saturday -> Shift back to Friday (subtract 1 day)
+      closeTime -= 24 * 3600 * 1000;
+    }
+
     const durationMs = (15 + Math.random() * 65) * 60 * 1000;
     const openTime = closeTime - durationMs;
 
@@ -141,94 +158,98 @@ backtestRouter.get("/backtest/history", async (c) => {
     if (inMemoryTrades.length === 0) {
       await seedBacktestHistory();
     } else {
-      // Dynamic live update: append a new completed trade if latest is older than 2 minutes (120000ms)
-      const newest = inMemoryTrades[0];
       const now = Date.now();
-      if (newest && (now - newest.closeTime) > 120_000) {
-        console.log(`Latest trade was closed ${Math.round((now - newest.closeTime)/1000)}s ago. Generating a fresh completed trade in real time...`);
-        
-        let rtPrice = 2350.00;
-        try {
-          const rt = await getGoldRealtimePrice();
-          if (rt && rt.price) rtPrice = rt.price;
-        } catch (_) {}
+      
+      // Strict Weekend filter: do not generate live trade updates on Saturday or Sunday
+      if (!isWeekend(now)) {
+        // Dynamic live update: append a new completed trade if latest is older than 2 minutes (120000ms)
+        const newest = inMemoryTrades[0];
+        if (newest && (now - newest.closeTime) > 120_000) {
+          console.log(`Latest trade was closed ${Math.round((now - newest.closeTime)/1000)}s ago. Generating a fresh completed trade in real time...`);
+          
+          let rtPrice = 2350.00;
+          try {
+            const rt = await getGoldRealtimePrice();
+            if (rt && rt.price) rtPrice = rt.price;
+          } catch (_) {}
 
-        const timeframes = ["M1", "M5", "M15", "H1"];
-        const tf = timeframes[Math.floor(Math.random() * timeframes.length)];
-        const position = Math.random() > 0.45 ? "BUY" : "SELL";
+          const timeframes = ["M1", "M5", "M15", "H1"];
+          const tf = timeframes[Math.floor(Math.random() * timeframes.length)];
+          const position = Math.random() > 0.45 ? "BUY" : "SELL";
 
-        let lotSize = 0.1;
-        if (tf === "M5") lotSize = 0.2;
-        else if (tf === "M15") lotSize = 0.5;
-        else if (tf === "H1") lotSize = 1.0;
+          let lotSize = 0.1;
+          if (tf === "M5") lotSize = 0.2;
+          else if (tf === "M15") lotSize = 0.5;
+          else if (tf === "H1") lotSize = 1.0;
 
-        const multiplier = 100;
-        // Small fluctuation around current spot price for fresh entry
-        const entry = Math.round((rtPrice + (Math.random() - 0.5) * 5) * 100) / 100;
+          const multiplier = 100;
+          // Small fluctuation around current spot price for fresh entry
+          const entry = Math.round((rtPrice + (Math.random() - 0.5) * 5) * 100) / 100;
 
-        const rand = Math.random();
-        let status: "TP1" | "TP2" | "SL" = "TP2";
-        if (rand < 0.25) status = "SL";
-        else if (rand < 0.50) status = "TP1";
+          const rand = Math.random();
+          let status: "TP1" | "TP2" | "SL" = "TP2";
+          if (rand < 0.25) status = "SL";
+          else if (rand < 0.50) status = "TP1";
 
-        let pips = 0;
-        let stopLoss = 0;
-        let takeProfit1 = 0;
-        let takeProfit2 = 0;
-        let closePrice = 0;
+          let pips = 0;
+          let stopLoss = 0;
+          let takeProfit1 = 0;
+          let takeProfit2 = 0;
+          let closePrice = 0;
 
-        if (position === "BUY") {
-          stopLoss = Math.round((entry - (4 + Math.random() * 6)) * 100) / 100;
-          takeProfit1 = Math.round((entry + (5 + Math.random() * 5)) * 100) / 100;
-          takeProfit2 = Math.round((entry + (12 + Math.random() * 10)) * 100) / 100;
+          if (position === "BUY") {
+            stopLoss = Math.round((entry - (4 + Math.random() * 6)) * 100) / 100;
+            takeProfit1 = Math.round((entry + (5 + Math.random() * 5)) * 100) / 100;
+            takeProfit2 = Math.round((entry + (12 + Math.random() * 10)) * 100) / 100;
 
-          if (status === "TP2") {
-            closePrice = takeProfit2;
-            pips = Number(((takeProfit2 - entry) * 10).toFixed(1));
-          } else if (status === "TP1") {
-            closePrice = takeProfit1;
-            pips = Number(((takeProfit1 - entry) * 10).toFixed(1));
+            if (status === "TP2") {
+              closePrice = takeProfit2;
+              pips = Number(((takeProfit2 - entry) * 10).toFixed(1));
+            } else if (status === "TP1") {
+              closePrice = takeProfit1;
+              pips = Number(((takeProfit1 - entry) * 10).toFixed(1));
+            } else {
+              closePrice = stopLoss;
+              pips = Number(((stopLoss - entry) * 10).toFixed(1));
+            }
           } else {
-            closePrice = stopLoss;
-            pips = Number(((stopLoss - entry) * 10).toFixed(1));
-          }
-        } else {
-          stopLoss = Math.round((entry + (4 + Math.random() * 6)) * 100) / 100;
-          takeProfit1 = Math.round((entry - (5 + Math.random() * 5)) * 100) / 100;
-          takeProfit2 = Math.round((entry - (12 + Math.random() * 10)) * 100) / 100;
+            stopLoss = Math.round((entry + (4 + Math.random() * 6)) * 100) / 100;
+            takeProfit1 = Math.round((entry - (5 + Math.random() * 5)) * 100) / 100;
+            takeProfit2 = Math.round((entry - (12 + Math.random() * 10)) * 100) / 100;
 
-          if (status === "TP2") {
-            closePrice = takeProfit2;
-            pips = Number(((entry - takeProfit2) * 10).toFixed(1));
-          } else if (status === "TP1") {
-            closePrice = takeProfit1;
-            pips = Number(((entry - takeProfit1) * 10).toFixed(1));
-          } else {
-            closePrice = stopLoss;
-            pips = Number(((entry - stopLoss) * 10).toFixed(1));
+            if (status === "TP2") {
+              closePrice = takeProfit2;
+              pips = Number(((entry - takeProfit2) * 10).toFixed(1));
+            } else if (status === "TP1") {
+              closePrice = takeProfit1;
+              pips = Number(((entry - takeProfit1) * 10).toFixed(1));
+            } else {
+              closePrice = stopLoss;
+              pips = Number(((entry - stopLoss) * 10).toFixed(1));
+            }
           }
+
+          const profitUsd = Number((pips * multiplier * lotSize / 10).toFixed(2));
+          const durationMs = (5 + Math.random() * 25) * 60 * 1000;
+          const openTime = now - durationMs;
+
+          const newTrade: ClosedTrade = {
+            id: `${tf}-${openTime}-${Math.random().toString(36).substring(2, 6)}`,
+            timeframe: tf,
+            position,
+            entry,
+            stopLoss,
+            takeProfit1,
+            takeProfit2,
+            status,
+            openTime,
+            closeTime: now,
+            pips,
+            profitUsd,
+          };
+
+          inMemoryTrades.unshift(newTrade);
         }
-
-        const profitUsd = Number((pips * multiplier * lotSize / 10).toFixed(2));
-        const durationMs = (5 + Math.random() * 25) * 60 * 1000;
-        const openTime = now - durationMs;
-
-        const newTrade: ClosedTrade = {
-          id: `${tf}-${openTime}-${Math.random().toString(36).substring(2, 6)}`,
-          timeframe: tf,
-          position,
-          entry,
-          stopLoss,
-          takeProfit1,
-          takeProfit2,
-          status,
-          openTime,
-          closeTime: now,
-          pips,
-          profitUsd,
-        };
-
-        inMemoryTrades.unshift(newTrade);
       }
     }
     return c.json({ success: true, trades: inMemoryTrades });
