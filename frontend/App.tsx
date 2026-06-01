@@ -2918,21 +2918,14 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                   </div>
 
                   {/* REASONS & LIVE TRADES INFO */}
-                  <div className="reasons-box">
-                    <div className="reasons">
+                  <div className="reasons-box" style={{ gridTemplateColumns: "1fr" }}>
+                    <div className="reasons" style={{ margin: 0 }}>
                       <h3>🔍 Luận điểm phân tích chiến thuật (XAU/USD)</h3>
                       {data.signals.reasons.map((reason, idx) => (
                         <div key={idx} className="reason-row">
                           {reason}
                         </div>
                       ))}
-                    </div>
-
-                    <div className="reasons" style={{ background: "rgba(255, 171, 0, 0.02)", borderColor: "rgba(255, 171, 0, 0.1)" }}>
-                      <h3>⚠️ Tuyên bố miễn trừ trách nhiệm</h3>
-                      <div style={{ fontSize: "12px", color: "var(--text2)", lineHeight: "1.6" }}>
-                        Vàng (Gold spot) là một trong những tài sản tài chính có độ biến động và đòn bẩy lớn nhất thế giới. Các phân tích kỹ thuật, xác xuất và gợi ý vào lệnh hiển thị trên hệ thống chỉ mang tính chất tham khảo dựa trên thuật toán tích lũy. Không cấu thành lời khuyên đầu tư tài chính chính thức. Vui lòng tự quản trị vốn nghiêm ngặt!
-                      </div>
                     </div>
                   </div>
                 </>
@@ -3097,6 +3090,14 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                       </div>
                     </div>
                   )}
+
+                  {/* Disclaimer Box */}
+                  <div className="reasons" style={{ background: "rgba(255, 171, 0, 0.02)", borderColor: "rgba(255, 171, 0, 0.1)", margin: 0 }}>
+                    <h3>⚠️ Tuyên bố miễn trừ trách nhiệm</h3>
+                    <div style={{ fontSize: "12px", color: "var(--text2)", lineHeight: "1.6" }}>
+                      Vàng (Gold spot) là một trong những tài sản tài chính có độ biến động và đòn bẩy lớn nhất thế giới. Các phân tích kỹ thuật, xác xuất và gợi ý vào lệnh hiển thị trên hệ thống chỉ mang tính chất tham khảo dựa trên thuật toán tích lũy. Không cấu thành lời khuyên đầu tư tài chính chính thức. Vui lòng tự quản trị vốn nghiêm ngặt!
+                    </div>
+                  </div>
 
 
 
