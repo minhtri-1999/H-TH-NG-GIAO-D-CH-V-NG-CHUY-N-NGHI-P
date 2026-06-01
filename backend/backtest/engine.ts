@@ -1,279 +1,202 @@
 import { Hono } from "npm:hono@4";
-import { getGoldRealtimePrice } from "../api.ts";
+import { getGoldRealtimePrice, getGoldChartData } from "../api.ts";
 import { type ClosedTrade } from "../db.ts";
+import { analyzeSignals, type Candle } from "../signals.ts";
 
 export const backtestRouter = new Hono();
 
-// Thread-safe in-memory database to avoid slow Deno KV blocking & corrupted states on Deno Deploy
+// Thread-safe in-memory database to store real historical closed trades
 let inMemoryTrades: ClosedTrade[] = [];
+let lastSeedTime = 0;
 
-// Helper: Check if a timestamp falls on a weekend (Saturday or Sunday) in New York timezone (COMEX Market)
-function isWeekend(timeMs: number): boolean {
-  const date = new Date(timeMs);
-  const day = date.getDay(); // 0 = Sunday, 6 = Saturday
-  return day === 0 || day === 6;
+// Deterministic Backtest Engine: Runs strategy on actual historical candles
+export function backtestTimeframe(timeframe: string, candles: Candle[]): ClosedTrade[] {
+  const closedTrades: ClosedTrade[] = [];
+  const multiplier = 100; // Gold point contract size ($100 per pip per lot)
+
+  let lotSize = 0.1;
+  if (timeframe === "M5") lotSize = 0.2;
+  else if (timeframe === "M15") lotSize = 0.5;
+  else if (timeframe === "H1") lotSize = 1.0;
+  else if (timeframe === "D1") lotSize = 2.0;
+
+  let openTrade: {
+    position: "BUY" | "SELL";
+    entry: number;
+    stopLoss: number;
+    takeProfit1: number;
+    takeProfit2: number;
+    openTime: number;
+  } | null = null;
+
+  // We need at least 50 candles for complete indicators (like EMA50)
+  for (let i = 49; i < candles.length; i++) {
+    const currentCandle = candles[i];
+
+    if (openTrade) {
+      // Check if the current candle closes the open trade
+      let closed = false;
+      let status: "TP1" | "TP2" | "SL" = "SL";
+
+      if (openTrade.position === "BUY") {
+        if (currentCandle.low <= openTrade.stopLoss) {
+          closed = true;
+          status = "SL";
+        } else if (currentCandle.high >= openTrade.takeProfit2) {
+          closed = true;
+          status = "TP2";
+        } else if (currentCandle.high >= openTrade.takeProfit1) {
+          closed = true;
+          status = "TP1";
+        }
+      } else { // SELL
+        if (currentCandle.high >= openTrade.stopLoss) {
+          closed = true;
+          status = "SL";
+        } else if (currentCandle.low <= openTrade.takeProfit2) {
+          closed = true;
+          status = "TP2";
+        } else if (currentCandle.low <= openTrade.takeProfit1) {
+          closed = true;
+          status = "TP1";
+        }
+      }
+
+      if (closed) {
+        let pips = 0;
+        if (openTrade.position === "BUY") {
+          if (status === "TP2") pips = Number(((openTrade.takeProfit2 - openTrade.entry) * 10).toFixed(1));
+          else if (status === "TP1") pips = Number(((openTrade.takeProfit1 - openTrade.entry) * 10).toFixed(1));
+          else pips = Number(((openTrade.stopLoss - openTrade.entry) * 10).toFixed(1));
+        } else { // SELL
+          if (status === "TP2") pips = Number(((openTrade.entry - openTrade.takeProfit2) * 10).toFixed(1));
+          else if (status === "TP1") pips = Number(((openTrade.entry - openTrade.takeProfit1) * 10).toFixed(1));
+          else pips = Number(((openTrade.entry - openTrade.stopLoss) * 10).toFixed(1));
+        }
+
+        const profitUsd = Number((pips * multiplier * lotSize / 10).toFixed(2));
+        const closeTime = currentCandle.time * 1000;
+
+        closedTrades.push({
+          id: `${timeframe}-${openTrade.openTime}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+          timeframe,
+          position: openTrade.position,
+          entry: openTrade.entry,
+          stopLoss: openTrade.stopLoss,
+          takeProfit1: openTrade.takeProfit1,
+          takeProfit2: openTrade.takeProfit2,
+          status,
+          openTime: openTrade.openTime,
+          closeTime,
+          pips,
+          profitUsd,
+        });
+
+        openTrade = null;
+      }
+    } else {
+      // Evaluate signals at the close of candle i
+      const subCandles = candles.slice(0, i + 1);
+      const signal = analyzeSignals(subCandles);
+
+      if (signal.type === "BUY" || signal.type === "SELL") {
+        const sug = signal.suggestion;
+        if (sug.entry > 0 && sug.stopLoss > 0 && sug.takeProfit1 > 0) {
+          openTrade = {
+            position: signal.type,
+            entry: sug.entry,
+            stopLoss: sug.stopLoss,
+            takeProfit1: sug.takeProfit1,
+            takeProfit2: sug.takeProfit2,
+            openTime: currentCandle.time * 1000,
+          };
+        }
+      }
+    }
+  }
+
+  return closedTrades;
 }
 
-// Premium real-time dynamic completed trade generator
-export async function seedBacktestHistory(): Promise<ClosedTrade[]> {
-  console.log("Starting instant premium chronological backtest simulation run (In-Memory)...");
-  
-  const timeframes = ["M1", "M5", "M15", "H1", "D1"];
-  const list: ClosedTrade[] = [];
-  const multiplier = 100; // Gold point contract size
-
-  let rtPrice = 2350.00;
-  try {
-    const rt = await getGoldRealtimePrice();
-    if (rt && rt.price) {
-      rtPrice = rt.price;
-    }
-  } catch (_) {
-    // Fallback to default gold spot price
-  }
-
-  const totalTrades = 45; // Increased to 45 trades for maximum richness
+// Seed chronological backtest simulation runs over actual chart candle history
+export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]> {
   const now = Date.now();
-
-  for (let i = 0; i < totalTrades; i++) {
-    // We want to distribute trades heavily on TODAY (Hôm nay) to ensure a rich list of trades!
-    // Out of 45 trades:
-    // - 25 trades are placed TODAY (spread over the last 16 hours)
-    // - 20 trades are placed YESTERDAY (spread over the previous 24 hours, automatically shifted to Friday if weekend)
-    let closeTime = now;
-    if (i < 25) {
-      // TODAY: spread over the last 16 hours
-      const ageMs = (25 - i) * (16 * 3600 * 1000 / 25) - (Math.random() * 10 * 60 * 1000);
-      closeTime = now - ageMs;
-    } else {
-      // YESTERDAY: spread over 24 hours preceding today
-      const ageMs = 16 * 3600 * 1000 + (45 - i) * (24 * 3600 * 1000 / 20) - (Math.random() * 15 * 60 * 1000);
-      closeTime = now - ageMs;
-    }
-
-    // Strict Weekend filter: Shift trades that fall on Saturday/Sunday to Friday
-    const date = new Date(closeTime);
-    const day = date.getDay();
-    if (day === 0) { // Sunday -> Shift back to Friday (subtract 2 days)
-      closeTime -= 2 * 24 * 3600 * 1000;
-    } else if (day === 6) { // Saturday -> Shift back to Friday (subtract 1 day)
-      closeTime -= 24 * 3600 * 1000;
-    }
-
-    // Ensure the duration of trades is realistic (e.g. 5 to 45 minutes)
-    const durationMs = (5 + Math.random() * 40) * 60 * 1000;
-    const openTime = closeTime - durationMs;
-
-    const tf = timeframes[i % timeframes.length];
-    const position = Math.random() > 0.45 ? "BUY" : "SELL";
-
-    let lotSize = 0.1;
-    if (tf === "M5") lotSize = 0.2;
-    else if (tf === "M15") lotSize = 0.5;
-    else if (tf === "H1") lotSize = 1.0;
-    else if (tf === "D1") lotSize = 2.0;
-
-    // Price entry aligns realistically with current actual gold price
-    const priceOffset = (Math.random() - 0.5) * 30; // range of +/- 15 USD
-    const entry = Math.round((rtPrice + priceOffset) * 100) / 100;
-
-    // SMC high win rate (74% wins)
-    const rand = Math.random();
-    let status: "TP1" | "TP2" | "SL" = "TP2";
-    if (rand < 0.26) {
-      status = "SL";
-    } else if (rand < 0.50) {
-      status = "TP1";
-    }
-
-    let pips = 0;
-    let stopLoss = 0;
-    let takeProfit1 = 0;
-    let takeProfit2 = 0;
-    let closePrice = 0;
-
-    if (position === "BUY") {
-      stopLoss = Math.round((entry - (6 + Math.random() * 8)) * 100) / 100;
-      takeProfit1 = Math.round((entry + (8 + Math.random() * 8)) * 100) / 100;
-      takeProfit2 = Math.round((entry + (18 + Math.random() * 12)) * 100) / 100;
-
-      if (status === "TP2") {
-        closePrice = takeProfit2;
-        pips = Number(((takeProfit2 - entry) * 10).toFixed(1));
-      } else if (status === "TP1") {
-        closePrice = takeProfit1;
-        pips = Number(((takeProfit1 - entry) * 10).toFixed(1));
-      } else {
-        closePrice = stopLoss;
-        pips = Number(((stopLoss - entry) * 10).toFixed(1));
-      }
-    } else {
-      stopLoss = Math.round((entry + (6 + Math.random() * 8)) * 100) / 100;
-      takeProfit1 = Math.round((entry - (8 + Math.random() * 8)) * 100) / 100;
-      takeProfit2 = Math.round((entry - (18 + Math.random() * 12)) * 100) / 100;
-
-      if (status === "TP2") {
-        closePrice = takeProfit2;
-        pips = Number(((entry - takeProfit2) * 10).toFixed(1));
-      } else if (status === "TP1") {
-        closePrice = takeProfit1;
-        pips = Number(((entry - takeProfit1) * 10).toFixed(1));
-      } else {
-        closePrice = stopLoss;
-        pips = Number(((entry - stopLoss) * 10).toFixed(1));
-      }
-    }
-
-    const profitUsd = Number((pips * multiplier * lotSize / 10).toFixed(2));
-
-    const trade: ClosedTrade = {
-      id: `${tf}-${openTime}-${Math.random().toString(36).substring(2, 6)}`,
-      timeframe: tf,
-      position,
-      entry,
-      stopLoss,
-      takeProfit1,
-      takeProfit2,
-      status,
-      openTime,
-      closeTime,
-      pips,
-      profitUsd,
-    };
-
-    list.push(trade);
+  // Cache the generated closed trades for 15 seconds to optimize performance
+  if (!force && inMemoryTrades.length > 0 && (now - lastSeedTime) < 15_000) {
+    return inMemoryTrades;
   }
 
-  // Write reports physically
+  console.log("Running real historical gold backtest simulation across all timeframes...");
+  
+  const tfParams = [
+    { param: "1", name: "M1" },
+    { param: "5", name: "M5" },
+    { param: "15", name: "M15" },
+    { param: "60", name: "H1" },
+    { param: "1D", name: "D1" }
+  ];
+
+  const allTrades: ClosedTrade[] = [];
+
+  for (const tf of tfParams) {
+    try {
+      const chartRaw = await getGoldChartData(tf.param);
+      if (chartRaw && chartRaw.close && chartRaw.close.length >= 50) {
+        const candles: Candle[] = chartRaw.timestamp.map((t, idx) => ({
+          time: t,
+          open: chartRaw.open[idx] ?? 0,
+          high: chartRaw.high[idx] ?? 0,
+          low: chartRaw.low[idx] ?? 0,
+          close: chartRaw.close[idx] ?? 0,
+          volume: chartRaw.volume[idx] ?? 0,
+        })).filter(c => c.open > 0 && c.close > 0);
+
+        const tfTrades = backtestTimeframe(tf.name, candles);
+        allTrades.push(...tfTrades);
+        console.log(`[Backtest] Successfully ran ${tf.name} backtest, generated ${tfTrades.length} trades.`);
+      }
+    } catch (e: any) {
+      console.error(`Failed to backtest timeframe ${tf.name}:`, e.message);
+    }
+  }
+
+  // Sort trades chronologically (newest closed trades first)
+  inMemoryTrades = allTrades.sort((a, b) => b.closeTime - a.closeTime);
+  lastSeedTime = Date.now();
+
+  // Save backtest reports physically in workspace for export/download support
   try {
     await Deno.mkdir("backtest_reports", { recursive: true });
-    await Deno.writeTextFile("backtest_reports/latest_backtest.json", JSON.stringify(list, null, 2));
+    await Deno.writeTextFile("backtest_reports/latest_backtest.json", JSON.stringify(inMemoryTrades, null, 2));
 
     let csvContent = "ID,Timeframe,Position,Entry,Stop Loss,Take Profit 1,Take Profit 2,Status,Open Time,Close Time,Pips,Profit USD\n";
-    for (const t of list) {
+    for (const t of inMemoryTrades) {
       const openDate = new Date(t.openTime).toISOString();
       const closeDate = new Date(t.closeTime).toISOString();
       csvContent += `"${t.id}","${t.timeframe}","${t.position}",${t.entry},${t.stopLoss},${t.takeProfit1},${t.takeProfit2},"${t.status}","${openDate}","${closeDate}",${t.pips},${t.profitUsd}\n`;
     }
     await Deno.writeTextFile("backtest_reports/latest_backtest.csv", csvContent);
-  } catch (_) {
-    // Ignore physical writing errors in read-only serverless zones
+  } catch (err: any) {
+    console.warn("Could not save physical backtest reports files:", err.message);
   }
 
-  inMemoryTrades = list.sort((a, b) => b.closeTime - a.closeTime);
   return inMemoryTrades;
 }
 
-// GET /backtest/history - Fetch persistent closed trades with real-time continuous dynamic updates
+// GET /backtest/history - Fetch persistent closed trades with real-time historical updates
 backtestRouter.get("/backtest/history", async (c) => {
   try {
-    if (inMemoryTrades.length === 0) {
-      await seedBacktestHistory();
-    } else {
-      const now = Date.now();
-      
-      // Strict Weekend filter: do not generate live trade updates on Saturday or Sunday
-      if (!isWeekend(now)) {
-        // Dynamic live update: append a new completed trade if latest is older than 2 minutes (120000ms)
-        const newest = inMemoryTrades[0];
-        if (newest && (now - newest.closeTime) > 120_000) {
-          console.log(`Latest trade was closed ${Math.round((now - newest.closeTime)/1000)}s ago. Generating a fresh completed trade in real time...`);
-          
-          let rtPrice = 2350.00;
-          try {
-            const rt = await getGoldRealtimePrice();
-            if (rt && rt.price) rtPrice = rt.price;
-          } catch (_) {}
-
-          const timeframes = ["M1", "M5", "M15", "H1"];
-          const tf = timeframes[Math.floor(Math.random() * timeframes.length)];
-          const position = Math.random() > 0.45 ? "BUY" : "SELL";
-
-          let lotSize = 0.1;
-          if (tf === "M5") lotSize = 0.2;
-          else if (tf === "M15") lotSize = 0.5;
-          else if (tf === "H1") lotSize = 1.0;
-
-          const multiplier = 100;
-          // Small fluctuation around current spot price for fresh entry
-          const entry = Math.round((rtPrice + (Math.random() - 0.5) * 5) * 100) / 100;
-
-          const rand = Math.random();
-          let status: "TP1" | "TP2" | "SL" = "TP2";
-          if (rand < 0.25) status = "SL";
-          else if (rand < 0.50) status = "TP1";
-
-          let pips = 0;
-          let stopLoss = 0;
-          let takeProfit1 = 0;
-          let takeProfit2 = 0;
-          let closePrice = 0;
-
-          if (position === "BUY") {
-            stopLoss = Math.round((entry - (4 + Math.random() * 6)) * 100) / 100;
-            takeProfit1 = Math.round((entry + (5 + Math.random() * 5)) * 100) / 100;
-            takeProfit2 = Math.round((entry + (12 + Math.random() * 10)) * 100) / 100;
-
-            if (status === "TP2") {
-              closePrice = takeProfit2;
-              pips = Number(((takeProfit2 - entry) * 10).toFixed(1));
-            } else if (status === "TP1") {
-              closePrice = takeProfit1;
-              pips = Number(((takeProfit1 - entry) * 10).toFixed(1));
-            } else {
-              closePrice = stopLoss;
-              pips = Number(((stopLoss - entry) * 10).toFixed(1));
-            }
-          } else {
-            stopLoss = Math.round((entry + (4 + Math.random() * 6)) * 100) / 100;
-            takeProfit1 = Math.round((entry - (5 + Math.random() * 5)) * 100) / 100;
-            takeProfit2 = Math.round((entry - (12 + Math.random() * 10)) * 100) / 100;
-
-            if (status === "TP2") {
-              closePrice = takeProfit2;
-              pips = Number(((entry - takeProfit2) * 10).toFixed(1));
-            } else if (status === "TP1") {
-              closePrice = takeProfit1;
-              pips = Number(((entry - takeProfit1) * 10).toFixed(1));
-            } else {
-              closePrice = stopLoss;
-              pips = Number(((entry - stopLoss) * 10).toFixed(1));
-            }
-          }
-
-          const profitUsd = Number((pips * multiplier * lotSize / 10).toFixed(2));
-          const durationMs = (5 + Math.random() * 25) * 60 * 1000;
-          const openTime = now - durationMs;
-
-          const newTrade: ClosedTrade = {
-            id: `${tf}-${openTime}-${Math.random().toString(36).substring(2, 6)}`,
-            timeframe: tf,
-            position,
-            entry,
-            stopLoss,
-            takeProfit1,
-            takeProfit2,
-            status,
-            openTime,
-            closeTime: now,
-            pips,
-            profitUsd,
-          };
-
-          inMemoryTrades.unshift(newTrade);
-        }
-      }
-    }
-    return c.json({ success: true, trades: inMemoryTrades });
+    const trades = await seedBacktestHistory();
+    return c.json({ success: true, trades });
   } catch (err: any) {
     return c.json({ error: "Lỗi hệ thống khi lấy lịch sử giao dịch: " + err.message }, 500);
   }
 });
 
-// POST /backtest/reset - Force rerun chronological backtest simulation
+// POST /backtest/reset - Force refresh backtest by clearing cache
 backtestRouter.post("/backtest/reset", async (c) => {
   try {
-    const trades = await seedBacktestHistory();
+    const trades = await seedBacktestHistory(true);
     return c.json({ success: true, trades, message: "Đã hoàn thành chạy lại backtest thực tế từ dữ liệu nến biểu đồ!" });
   } catch (err: any) {
     return c.json({ error: "Lỗi hệ thống khi chạy lại backtest: " + err.message }, 500);
@@ -283,7 +206,7 @@ backtestRouter.post("/backtest/reset", async (c) => {
 // Backup safe route for double-prefix compatibility
 backtestRouter.post("/api/backtest/reset", async (c) => {
   try {
-    const trades = await seedBacktestHistory();
+    const trades = await seedBacktestHistory(true);
     return c.json({ success: true, trades, message: "Đã hoàn thành chạy lại backtest thực tế từ dữ liệu nến biểu đồ!" });
   } catch (err: any) {
     return c.json({ error: "Lỗi hệ thống khi chạy lại backtest: " + err.message }, 500);
