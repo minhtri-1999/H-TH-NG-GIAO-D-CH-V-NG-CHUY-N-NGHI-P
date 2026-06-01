@@ -233,14 +233,14 @@ export default function App() {
   const [data, setData] = useState<GoldSignalResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [dashTab, _setDashTab] = useState<"general" | "ai" | "backtest" | "outlook">(() => {
+  const [dashTab, _setDashTab] = useState<"ai" | "backtest" | "outlook">(() => {
     const saved = localStorage.getItem("active_dash_tab");
-    if (saved === "general" || saved === "ai" || saved === "backtest" || saved === "outlook") {
+    if (saved === "ai" || saved === "backtest" || saved === "outlook") {
       return saved as any;
     }
-    return "general";
+    return "ai";
   });
-  const setDashTab = (tab: "general" | "ai" | "backtest" | "outlook") => {
+  const setDashTab = (tab: "ai" | "backtest" | "outlook") => {
     _setDashTab(tab);
     localStorage.setItem("active_dash_tab", tab);
   };
@@ -2796,12 +2796,7 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
             <div className="signal-dash">
               {/* Premium Workspace Tab Menu */}
               <div className="dash-tabs">
-                <button
-                  className={`dash-tab-btn ${dashTab === "general" ? "active" : ""}`}
-                  onClick={() => setDashTab("general")}
-                >
-                  📊 Tín Hiệu Chung
-                </button>
+
                 <button
                   className={`dash-tab-btn ${dashTab === "ai" ? "active" : ""}`}
                   onClick={() => setDashTab("ai")}
@@ -2822,114 +2817,7 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                 </button>
               </div>
 
-              {/* Tab 1: General Signals */}
-              {dashTab === "general" && (
-                <>
-                  <div className="top-metrics-row" style={{ gridTemplateColumns: "1fr" }}>
-                    {/* PROBABILITY DETAILS AND GAUGES */}
-                    <div className="hero-signal" style={{ borderColor: data.signals.type === "BUY" ? "var(--green)" : data.signals.type === "SELL" ? "var(--red)" : "var(--yellow)" }}>
-                      <div
-                        className="hero-badge"
-                        style={{
-                          background: data.signals.type === "BUY" ? "var(--green)" : data.signals.type === "SELL" ? "var(--red)" : "var(--yellow)",
-                          color: "#000"
-                        }}
-                      >
-                        {data.signals.type === "BUY" ? "TÍN HIỆU MUA (BUY)" : data.signals.type === "SELL" ? "TÍN HIỆU BÁN (SELL)" : "TÍN HIỆU TRUNG LẬP"}
-                      </div>
 
-                      <div className="hero-meters">
-                        <div className="meter">
-                          <div className="meter-head">
-                            <span className="meter-label">Sức Mạnh Tín Hiệu (Strength)</span>
-                            <span className="meter-val" style={{ color: "var(--gold)" }}>{data.signals.strength}%</span>
-                          </div>
-                          <div className="meter-track">
-                            <div className="meter-fill" style={{ width: `${data.signals.strength}%`, background: "var(--gold)" }}></div>
-                          </div>
-                        </div>
-                        <div className="meter">
-                          <div className="meter-head">
-                            <span className="meter-label">Độ Tin Cậy (Confidence)</span>
-                            <span className="meter-val" style={{ color: "var(--blue)" }}>{data.signals.confidence}%</span>
-                          </div>
-                          <div className="meter-track">
-                            <div className="meter-fill" style={{ width: `${data.signals.confidence}%`, background: "var(--blue)" }}></div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="hero-prob">
-                        <div className="prob-circle" style={probMeterStyle}>
-                          <span>{data.signals.strength}%</span>
-                        </div>
-                        <div className="prob-label">XÁC XUẤT XU HƯỚNG</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* TECHNICAL INDICATORS DOCK */}
-                  <div className="ind-grid">
-                    <div className="ind-card">
-                      <span className="ind-label">Chỉ báo RSI (14)</span>
-                      <span className="ind-value" style={{ color: data.signals.indicators.rsi > 70 ? "var(--red)" : data.signals.indicators.rsi < 30 ? "var(--green)" : "#fff" }}>
-                        {data.signals.indicators.rsi}
-                      </span>
-                      <span className="ind-hint">
-                        {data.signals.indicators.rsi > 70 ? "Quá Mua (Canh Bán)" : data.signals.indicators.rsi < 30 ? "Quá Bán (Canh Mua)" : "Trung Tính"}
-                      </span>
-                    </div>
-
-                    <div className="ind-card">
-                      <span className="ind-label">MACD (12, 26, 9)</span>
-                      <span className="ind-value" style={{ color: data.signals.indicators.macdSignal === "BUY" ? "var(--green)" : data.signals.indicators.macdSignal === "SELL" ? "var(--red)" : "#fff" }}>
-                        {data.signals.indicators.macdSignal === "BUY" ? "MUA" : data.signals.indicators.macdSignal === "SELL" ? "BÁN" : "TRUNG LẬP"}
-                      </span>
-                      <span className="ind-hint">Động lượng MACD</span>
-                    </div>
-
-                    <div className="ind-card">
-                      <span className="ind-label">Kênh SMA20</span>
-                      <span className="ind-value" style={{ color: data.signals.indicators.sma20Trend === "UP" ? "var(--green)" : data.signals.indicators.sma20Trend === "DOWN" ? "var(--red)" : "#fff" }}>
-                        {data.signals.indicators.sma20Trend === "UP" ? "TĂNG" : data.signals.indicators.sma20Trend === "DOWN" ? "GIẢM" : "ĐI NGANG"}
-                      </span>
-                      <span className="ind-hint">Xu hướng chính</span>
-                    </div>
-
-                    <div className="ind-card">
-                      <span className="ind-label">Bollinger Bands</span>
-                      <span className="ind-value" style={{ color: "var(--yellow)" }}>
-                        {data.signals.indicators.bollingerPosition === "UPPER" ? "BIÊN TRÊN" : data.signals.indicators.bollingerPosition === "LOWER" ? "BIÊN DƯỚI" : "ĐƯỜNG GIỮA"}
-                      </span>
-                      <span className="ind-hint">Vị trí giá hiện tại</span>
-                    </div>
-
-                    <div className="ind-card">
-                      <span className="ind-label">Nến Ticker (Live)</span>
-                      <span className="ind-value" style={{ color: "var(--green)" }}>TRỰC TUYẾN</span>
-                      <span className="ind-hint">Tần suất &lt; 90ms</span>
-                    </div>
-
-                    <div className="ind-card">
-                      <span className="ind-label">Độ Trễ Nguồn API</span>
-                      <span className="ind-value" style={{ color: "var(--green)", fontSize: "14px", marginTop: "4px" }}>&lt; 150ms</span>
-                      <span className="ind-hint">Giao thức REST/Rapid</span>
-                    </div>
-                  </div>
-
-                  {/* REASONS & LIVE TRADES INFO */}
-                  <div className="reasons-box" style={{ gridTemplateColumns: "1fr" }}>
-                    <div className="reasons" style={{ margin: 0 }}>
-                      <h3>🔍 Luận điểm phân tích chiến thuật (XAU/USD)</h3>
-                      {data.signals.reasons.map((reason, idx) => (
-                        <div key={idx} className="reason-row">
-                          {reason}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
 
               {/* Tab 2: 🤖 PHÂN TÍCH A.I */}
               {dashTab === "ai" && data && data.advancedAnalysis && (
