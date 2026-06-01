@@ -328,6 +328,8 @@ export default function App() {
   const [otpCountdown, setOtpCountdown] = useState<number>(0);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [simulatedOtp, setSimulatedOtp] = useState<string>("");
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const otpBoxRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Open-Source EMA States (TradingView Style)
   const [showEma50, setShowEma50] = useState<boolean>(true);
@@ -1482,13 +1484,60 @@ export default function App() {
     };
   }, [unifiedSignal]);
 
+  // OTP boxes handler
+  const handleOtpBoxChange = (idx: number, val: string) => {
+    const digit = val.replace(/\D/g, "").slice(-1);
+    const newOtp = authOtp.split("");
+    while (newOtp.length < 6) newOtp.push("");
+    newOtp[idx] = digit;
+    const joined = newOtp.join("");
+    setAuthOtp(joined);
+    if (digit && idx < 5) {
+      otpBoxRefs.current[idx + 1]?.focus();
+    }
+  };
+
+  const handleOtpBoxKeyDown = (idx: number, e: any) => {
+    if (e.key === "Backspace") {
+      const newOtp = authOtp.split("");
+      while (newOtp.length < 6) newOtp.push("");
+      if (!newOtp[idx] && idx > 0) {
+        newOtp[idx - 1] = "";
+        setAuthOtp(newOtp.join(""));
+        otpBoxRefs.current[idx - 1]?.focus();
+      } else {
+        newOtp[idx] = "";
+        setAuthOtp(newOtp.join(""));
+      }
+    }
+  };
+
+  // Password strength
+  const pwStrength = (() => {
+    const p = authPassword;
+    if (!p) return 0;
+    let score = 0;
+    if (p.length >= 6) score++;
+    if (p.length >= 10) score++;
+    if (/[A-Z]/.test(p) && /[0-9]/.test(p)) score++;
+    return score;
+  })();
+
+  const OTP_TOTAL = 300;
+  const otpProgress = OTP_TOTAL > 0 ? (otpCountdown / OTP_TOTAL) : 0;
+  const circumference = 2 * Math.PI * 22;
+  const strokeDashoffset = circumference * (1 - otpProgress);
+
   if (authLoading) {
     return (
       <div className="auth-container">
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
-          <img src="/frontend/logo.png" alt="XAU Logo" style={{ width: "120px", height: "120px", borderRadius: "16px", animation: "pulse 2s infinite ease-in-out", filter: "drop-shadow(0 0 24px rgba(255, 171, 0, 0.6))", marginBottom: "8px" }} />
-          <div style={{ color: "var(--gold)", fontWeight: "bold", fontSize: "16px", letterSpacing: "1px" }}>ĐANG KHỞI ĐỘNG XAU/USD GOLD TERMINAL...</div>
-          <div className="load-bar" style={{ width: "200px" }}><div className="load-fill"></div></div>
+        <div className="auth-grid-overlay" />
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "20px", position: "relative", zIndex: 1 }}>
+          <div className="auth-logo-ring">
+            <img src="/frontend/logo.png" alt="XAU Logo" className="auth-logo-img" />
+          </div>
+          <div style={{ color: "var(--gold)", fontWeight: "800", fontSize: "14px", letterSpacing: "2px", textTransform: "uppercase" }}>Đang khởi động hệ thống...</div>
+          <div className="load-bar" style={{ width: "220px" }}><div className="load-fill"></div></div>
         </div>
       </div>
     );
@@ -1497,179 +1546,305 @@ export default function App() {
   if (!user) {
     return (
       <div className="auth-container">
+        {/* Animated background grid */}
+        <div className="auth-grid-overlay" />
+
         <div className="auth-card">
-          <div className="auth-header" style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <img src="/frontend/logo.png" alt="XAU Logo" style={{ width: "110px", height: "110px", borderRadius: "14px", marginBottom: "16px", filter: "drop-shadow(0 0 20px rgba(255, 171, 0, 0.5))" }} />
-            <h1 className="auth-title">XAU/USD GOLD PRO</h1>
-            <p className="auth-subtitle">Hệ thống Tín hiệu & Đồ thị thông minh</p>
+
+          {/* Logo + Brand */}
+          <div className="auth-logo-wrap">
+            <div className="auth-logo-ring">
+              <img src="/frontend/logo.png" alt="XAU Logo" className="auth-logo-img" />
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div className="auth-brand-name">XAU/USD Gold Pro</div>
+              <div className="auth-brand-sub">Hệ Thống Giao Dịch Vàng Chuyên Nghiệp</div>
+            </div>
+            <div className="auth-live-badge">
+              <div className="auth-live-dot" />
+              Dữ liệu thời gian thực · Tín hiệu millisecond
+            </div>
           </div>
 
+          {/* Alerts */}
           {authError && (
             <div className="auth-alert error">
-              <span>⚠️</span>
+              <span className="auth-alert-icon">⚠️</span>
               <div>{authError}</div>
             </div>
           )}
-
           {authSuccess && (
             <div className="auth-alert success">
-              <span>✅</span>
+              <span className="auth-alert-icon">✅</span>
               <div>{authSuccess}</div>
             </div>
           )}
 
+          {/* LOGIN FORM */}
           {authMode === "login" && (
             <>
               <div className="auth-tabs">
-                <button className="auth-tab-btn active">ĐĂNG NHẬP</button>
-                <button className="auth-tab-btn" onClick={() => { setAuthMode("register"); setAuthError(null); setAuthSuccess(null); }}>ĐĂNG KÝ</button>
+                <button className="auth-tab-btn active">🔐 Đăng Nhập</button>
+                <button className="auth-tab-btn" onClick={() => { setAuthMode("register"); setAuthError(null); setAuthSuccess(null); setShowPassword(false); }}>📝 Đăng Ký</button>
               </div>
 
               <form className="auth-form" onSubmit={handleLogin}>
                 <div className="auth-field">
-                  <label className="auth-label">Địa chỉ Email</label>
-                  <input
-                    type="email"
-                    className="auth-input"
-                    placeholder="name@example.com"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    required
-                  />
+                  <label className="auth-label">📧 Địa chỉ Email</label>
+                  <div className="auth-input-wrap">
+                    <input
+                      type="email"
+                      className="auth-input"
+                      placeholder="name@example.com"
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      autoComplete="email"
+                      required
+                    />
+                    <span className="auth-input-icon" style={{ left: "unset", right: "14px", position: "absolute" }}>📧</span>
+                  </div>
                 </div>
                 <div className="auth-field">
-                  <label className="auth-label">Mật khẩu</label>
-                  <input
-                    type="password"
-                    className="auth-input"
-                    placeholder="••••••••"
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    required
-                  />
+                  <label className="auth-label">🔑 Mật khẩu</label>
+                  <div className="auth-input-wrap">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      className="auth-input"
+                      placeholder="••••••••"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      autoComplete="current-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="auth-pw-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? "🙈" : "👁️"}
+                    </button>
+                  </div>
                 </div>
                 <button type="submit" className="auth-submit-btn" disabled={submitting}>
-                  {submitting ? "Đang xác thực..." : "MỞ KHÓA TERMINAL 🔓"}
+                  {submitting ? <><div className="auth-spinner" /> Đang xác thực...</> : "🔓 MỞ KHÓA TERMINAL"}
                 </button>
               </form>
+
+              <div className="auth-stats-bar">
+                <div className="auth-stat-item">
+                  <div className="auth-stat-value">24/7</div>
+                  <div className="auth-stat-label">Hoạt động</div>
+                </div>
+                <div className="auth-stat-item">
+                  <div className="auth-stat-value">5ms</div>
+                  <div className="auth-stat-label">Độ trễ</div>
+                </div>
+                <div className="auth-stat-item">
+                  <div className="auth-stat-value">5+</div>
+                  <div className="auth-stat-label">Khung thời gian</div>
+                </div>
+                <div className="auth-stat-item">
+                  <div className="auth-stat-value">A.I</div>
+                  <div className="auth-stat-label">Phân tích</div>
+                </div>
+              </div>
             </>
           )}
 
+          {/* REGISTER FORM */}
           {authMode === "register" && (
             <>
               <div className="auth-tabs">
-                <button className="auth-tab-btn" onClick={() => { setAuthMode("login"); setAuthError(null); setAuthSuccess(null); }}>ĐĂNG NHẬP</button>
-                <button className="auth-tab-btn active">ĐĂNG KÝ</button>
+                <button className="auth-tab-btn" onClick={() => { setAuthMode("login"); setAuthError(null); setAuthSuccess(null); setShowPassword(false); }}>🔐 Đăng Nhập</button>
+                <button className="auth-tab-btn active">📝 Đăng Ký</button>
               </div>
 
               <form className="auth-form" onSubmit={handleRegister}>
                 <div className="auth-field">
-                  <label className="auth-label">Địa chỉ Email thực tế</label>
-                  <input
-                    type="email"
-                    className="auth-input"
-                    placeholder="name@example.com"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    required
-                  />
+                  <label className="auth-label">📧 Địa chỉ Email thực tế</label>
+                  <div className="auth-input-wrap">
+                    <input
+                      type="email"
+                      className="auth-input"
+                      placeholder="name@example.com"
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      autoComplete="email"
+                      required
+                    />
+                    <span style={{ position: "absolute", right: "14px", fontSize: "14px" }}>📧</span>
+                  </div>
+                  <div style={{ fontSize: "10.5px", color: "var(--text3)", marginTop: "2px" }}>Mã OTP xác thực sẽ được gửi về hòm thư này</div>
                 </div>
                 <div className="auth-field">
-                  <label className="auth-label">Mật khẩu (từ 6 ký tự)</label>
-                  <input
-                    type="password"
-                    className="auth-input"
-                    placeholder="••••••••"
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    required
-                  />
+                  <label className="auth-label">🔑 Mật khẩu (tối thiểu 6 ký tự)</label>
+                  <div className="auth-input-wrap">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      className="auth-input"
+                      placeholder="Nhập mật khẩu mạnh..."
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      autoComplete="new-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="auth-pw-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? "🙈" : "👁️"}
+                    </button>
+                  </div>
+                  {/* Password strength indicator */}
+                  {authPassword.length > 0 && (
+                    <div className="auth-pw-strength">
+                      <div className={`auth-pw-strength-bar ${pwStrength >= 1 ? (pwStrength === 1 ? "weak" : pwStrength === 2 ? "medium" : "strong") : ""}`} />
+                      <div className={`auth-pw-strength-bar ${pwStrength >= 2 ? (pwStrength === 2 ? "medium" : "strong") : ""}`} />
+                      <div className={`auth-pw-strength-bar ${pwStrength >= 3 ? "strong" : ""}`} />
+                    </div>
+                  )}
+                  {authPassword.length > 0 && (
+                    <div style={{ fontSize: "10px", color: pwStrength === 0 ? "#ff1744" : pwStrength === 1 ? "#ff1744" : pwStrength === 2 ? "#ffab00" : "#00e676", marginTop: "2px" }}>
+                      {pwStrength === 0 || pwStrength === 1 ? "Mật khẩu yếu — nên thêm chữ hoa và số" : pwStrength === 2 ? "Mật khẩu trung bình" : "✓ Mật khẩu mạnh"}
+                    </div>
+                  )}
                 </div>
                 <button type="submit" className="auth-submit-btn" disabled={submitting}>
-                  {submitting ? "Đang đăng ký & gửi OTP..." : "ĐĂNG KÝ & GỬI OTP ✉️"}
+                  {submitting ? <><div className="auth-spinner" /> Đang đăng ký & gửi OTP...</> : "✉️ ĐĂNG KÝ & GỬI MÃ OTP"}
                 </button>
               </form>
+
+              <div style={{ fontSize: "11px", color: "var(--text3)", textAlign: "center", lineHeight: "1.5" }}>
+                Bằng cách đăng ký, bạn đồng ý với điều khoản dịch vụ.<br />
+                Mã OTP có hiệu lực trong <strong style={{ color: "var(--gold)" }}>5 phút</strong>.
+              </div>
             </>
           )}
 
+          {/* OTP VERIFICATION */}
           {authMode === "otp" && (
             <div className="auth-otp-wrap">
-              <div style={{ textAlign: "center", color: "var(--text2)", fontSize: "13.5px" }}>
-                Vui lòng nhập mã OTP 6 số đã được gửi tới hòm thư:<br />
-                <strong style={{ color: "var(--gold)" }}>{authEmail}</strong>
+              <div className="auth-otp-header">
+                <span className="auth-otp-icon">📬</span>
+                <div className="auth-otp-title">Xác thực Email</div>
+                <div className="auth-otp-desc">
+                  Nhập mã OTP 6 số đã được gửi tới:<br />
+                  <span className="auth-otp-email">{authEmail}</span>
+                </div>
               </div>
 
-              <form className="auth-form" style={{ width: "100%" }} onSubmit={handleVerifyOtp}>
-                <div className="auth-field">
-                  <label className="auth-label" style={{ textAlign: "center" }}>MÃ XÁC THỰC OTP</label>
-                  <input
-                    type="text"
-                    maxLength={6}
-                    className="auth-otp-input"
-                    placeholder="••••••"
-                    value={authOtp}
-                    onChange={(e) => setAuthOtp(e.target.value.replace(/\D/g, ""))}
-                    required
-                  />
+              {/* Countdown ring + OTP boxes */}
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <div className="auth-countdown-wrap">
+                  <div className="auth-countdown-ring">
+                    <svg width="56" height="56" viewBox="0 0 56 56">
+                      <circle className="auth-countdown-bg" cx="28" cy="28" r="22" strokeWidth="3" />
+                      <circle
+                        className="auth-countdown-fill"
+                        cx="28" cy="28" r="22"
+                        strokeWidth="3"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={strokeDashoffset}
+                      />
+                    </svg>
+                    <div className="auth-countdown-text">
+                      {otpCountdown > 0 ? `${Math.floor(otpCountdown / 60)}:${(otpCountdown % 60).toString().padStart(2, "0")}` : "0:00"}
+                    </div>
+                  </div>
                 </div>
-                <button type="submit" className="auth-submit-btn" disabled={submitting || authOtp.length !== 6}>
-                  {submitting ? "Đang kiểm tra..." : "KÍCH HOẠT TÀI KHOẢN 🚀"}
-                </button>
-              </form>
+
+                {/* 6 individual OTP digit boxes */}
+                <div className="auth-otp-boxes">
+                  {[0,1,2,3,4,5].map((i) => (
+                    <input
+                      key={i}
+                      ref={(el) => { otpBoxRefs.current[i] = el; }}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      className={`auth-otp-box ${authOtp[i] ? "filled" : ""}`}
+                      value={authOtp[i] || ""}
+                      onChange={(e) => handleOtpBoxChange(i, e.target.value)}
+                      onKeyDown={(e) => handleOtpBoxKeyDown(i, e)}
+                      onFocus={(e) => e.target.select()}
+                      onPaste={(e) => {
+                        const paste = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+                        if (paste.length > 0) {
+                          setAuthOtp(paste.padEnd(6, "").slice(0, 6));
+                          const focusIdx = Math.min(paste.length, 5);
+                          otpBoxRefs.current[focusIdx]?.focus();
+                        }
+                        e.preventDefault();
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <button
+                className="auth-submit-btn"
+                style={{ width: "100%" }}
+                onClick={handleVerifyOtp}
+                disabled={submitting || authOtp.replace(/\D/g,"").length < 6}
+              >
+                {submitting ? <><div className="auth-spinner" /> Đang kiểm tra...</> : "🚀 KÍCH HOẠT TÀI KHOẢN"}
+              </button>
 
               {simulatedOtp && (
                 <div style={{
-                  background: "rgba(255, 171, 0, 0.08)",
-                  border: "1px dashed var(--gold)",
-                  borderRadius: "8px",
-                  padding: "12px",
-                  marginTop: "12px",
-                  fontSize: "12.5px",
+                  background: "rgba(255, 171, 0, 0.06)",
+                  border: "1px dashed rgba(255,171,0,0.4)",
+                  borderRadius: "12px",
+                  padding: "14px",
+                  fontSize: "12px",
                   color: "var(--text)",
                   textAlign: "center",
-                  lineHeight: "1.5"
+                  lineHeight: "1.6",
+                  width: "100%"
                 }}>
-                  <div style={{ fontWeight: "bold", color: "var(--gold)", marginBottom: "4px" }}>
-                    🤖 PHÁT HIỆN CHẾ ĐỘ THỬ NGHIỆM
+                  <div style={{ fontWeight: "800", color: "var(--gold)", marginBottom: "6px", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    🤖 Chế độ thử nghiệm (Simulator)
                   </div>
-                  Máy chủ chưa cấu hình Email API trong tệp <code style={{ color: "var(--yellow)", fontFamily: "monospace" }}>.env</code>.
-                  <div style={{ margin: "8px 0" }}>
-                    Mã OTP của bạn là: <strong style={{ color: "var(--green)", fontSize: "16px", fontFamily: "monospace", letterSpacing: "1px" }}>{simulatedOtp}</strong>
-                  </div>
-                  <span
-                    onClick={() => setAuthOtp(simulatedOtp)}
-                    style={{
-                      background: "rgba(0, 230, 118, 0.15)",
-                      color: "var(--green)",
-                      padding: "4px 8px",
-                      borderRadius: "4px",
-                      fontSize: "11px",
-                      cursor: "pointer",
-                      fontWeight: "bold",
-                      display: "inline-block",
-                      border: "1px solid rgba(0, 230, 118, 0.3)"
+                  <div>Mã OTP: <strong style={{ color: "#00e676", fontSize: "20px", fontFamily: "monospace", letterSpacing: "4px" }}>{simulatedOtp}</strong></div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthOtp(simulatedOtp);
+                      otpBoxRefs.current[5]?.focus();
                     }}
-                  >
-                    ⚡ TỰ ĐỘNG ĐIỀN MÃ OTP
-                  </span>
-                  <div style={{ fontSize: "10.5px", color: "var(--text3)", marginTop: "8px" }}>
-                    Để gửi email thật về hòm thư, vui lòng cấu hình SMTP hoặc Resend API trong tệp <strong style={{ color: "#fff" }}>.env</strong> ở thư mục dự án và khởi động lại server.
+                    style={{
+                      marginTop: "8px",
+                      background: "rgba(0, 230, 118, 0.12)",
+                      border: "1px solid rgba(0, 230, 118, 0.25)",
+                      color: "#00e676",
+                      borderRadius: "6px",
+                      padding: "4px 12px",
+                      fontSize: "11px",
+                      fontWeight: "700",
+                      cursor: "pointer"
+                    }}
+                  >⚡ Điền tự động</button>
+                  <div style={{ fontSize: "10px", color: "var(--text3)", marginTop: "8px" }}>
+                    Để gửi email thực, cấu hình SMTP hoặc Resend trong <code>.env</code>
                   </div>
                 </div>
               )}
 
-              <div className="auth-resend">
+              <div className="auth-resend-row">
                 {otpCountdown > 0 ? (
-                  <span>Gửi lại mã sau {Math.floor(otpCountdown / 60)}:{(otpCountdown % 60).toString().padStart(2, "0")}</span>
+                  <>Gửi lại mã sau {Math.floor(otpCountdown / 60)}:{(otpCountdown % 60).toString().padStart(2, "0")}</>
                 ) : (
-                  <span>
-                    Không nhận được email? <span onClick={handleResendOtp}>Bấm gửi lại OTP</span>
-                  </span>
+                  <>Không nhận được email?{" "}
+                    <button className="auth-resend-btn" type="button" onClick={handleResendOtp}>Gửi lại OTP</button>
+                  </>
                 )}
               </div>
 
-              <div className="auth-link" onClick={() => { setAuthMode("login"); setAuthError(null); setAuthSuccess(null); setSimulatedOtp(""); }}>
-                ← Quay lại trang Đăng nhập
+              <div className="auth-link" onClick={() => { setAuthMode("login"); setAuthError(null); setAuthSuccess(null); setSimulatedOtp(""); setAuthOtp(""); }}>
+                ← Quay lại đăng nhập
               </div>
             </div>
           )}
@@ -1691,6 +1866,48 @@ export default function App() {
         </div>
         <div className="topbar-right">
           <span className="clock">{currentTime || "00:00:00 UTC"}</span>
+          {user && (
+            <div className="user-profile-chip" style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              background: "rgba(255, 215, 0, 0.04)",
+              border: "1px solid rgba(255, 215, 0, 0.12)",
+              padding: "4px 12px",
+              borderRadius: "8px",
+              marginRight: "10px",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)"
+            }}>
+              <span style={{ fontSize: "11px", color: "var(--text2)", fontWeight: "600" }}>👤 {user.email}</span>
+              <div style={{ width: "1px", height: "12px", background: "rgba(255,255,255,0.12)", margin: "0 4px" }} />
+              <button
+                type="button"
+                onClick={handleLogout}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#ff1744",
+                  fontSize: "11px",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  transition: "all 0.2s ease"
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = "rgba(255, 23, 68, 0.1)";
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                }}
+              >
+                🚪 Đăng xuất
+              </button>
+            </div>
+          )}
           <button
             className={`tf-btn ${soundEnabled ? "active" : ""}`}
             style={{
