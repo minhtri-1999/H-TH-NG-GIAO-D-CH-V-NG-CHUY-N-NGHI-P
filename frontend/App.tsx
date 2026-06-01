@@ -1702,11 +1702,11 @@ export default function App() {
         {/* SIDEBAR */}
         {!fullChart && (
         <aside className="sidebar">
-          <div className="sb-header hide-on-mobile">
+          <header className="sb-header hide-on-mobile">
             <div className="gold-profile-card">
               <div className="g-title">🟡 VÀNG SPOT (XAU/USD)</div>
             </div>
-          </div>
+          </header>
 
           <div style={{ padding: "16px", flex: 1, display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
             {data && (
