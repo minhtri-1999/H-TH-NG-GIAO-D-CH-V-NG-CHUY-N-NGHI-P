@@ -1,6 +1,6 @@
 import { Hono } from "npm:hono@4";
 import { getGoldRealtimePrice, getGoldChartData } from "../api.ts";
-import { type ClosedTrade } from "../db.ts";
+import { type ClosedTrade, saveClosedTrade, getClosedTrades } from "../db.ts";
 import { analyzeSignals, type Candle } from "../signals.ts";
 
 export const backtestRouter = new Hono();
@@ -138,16 +138,28 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
 
   const allTrades: ClosedTrade[] = [];
 
+  // Fetch the latest wiggled price to establish a consistent price offset
+  let rt;
+  try {
+    rt = await getGoldRealtimePrice();
+  } catch (_) {
+    rt = { price: 4500.00 };
+  }
+
   for (const tf of tfParams) {
     try {
       const chartRaw = await getGoldChartData(tf.param);
       if (chartRaw && chartRaw.close && chartRaw.close.length >= 50) {
+        // Calculate the exact wiggled price offset to align with the screen chart
+        const lastChartClose = chartRaw.close.length > 0 ? chartRaw.close[chartRaw.close.length - 1] : 0;
+        const offset = lastChartClose > 0 ? rt.price - lastChartClose : 0;
+
         const candles: Candle[] = chartRaw.timestamp.map((t, idx) => ({
           time: t,
-          open: chartRaw.open[idx] ?? 0,
-          high: chartRaw.high[idx] ?? 0,
-          low: chartRaw.low[idx] ?? 0,
-          close: chartRaw.close[idx] ?? 0,
+          open: (chartRaw.open[idx] ?? 0) + offset,
+          high: (chartRaw.high[idx] ?? 0) + offset,
+          low: (chartRaw.low[idx] ?? 0) + offset,
+          close: (chartRaw.close[idx] ?? 0) + offset,
           volume: chartRaw.volume[idx] ?? 0,
         })).filter(c => c.open > 0 && c.close > 0);
 
@@ -160,8 +172,17 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
     }
   }
 
+  // Load real-time manual/AI closed trades from Deno KV database to merge with the backtest
+  let kvTrades: ClosedTrade[] = [];
+  try {
+    kvTrades = await getClosedTrades();
+  } catch (err: any) {
+    console.error("Failed to fetch closed trades from Deno KV:", err.message);
+  }
+
   // Sort trades chronologically (newest closed trades first)
-  inMemoryTrades = allTrades.sort((a, b) => b.closeTime - a.closeTime);
+  const mergedTrades = [...kvTrades, ...allTrades];
+  inMemoryTrades = mergedTrades.sort((a, b) => b.closeTime - a.closeTime);
   lastSeedTime = Date.now();
 
   // Save backtest reports physically in workspace for export/download support
@@ -190,6 +211,41 @@ backtestRouter.get("/backtest/history", async (c) => {
     return c.json({ success: true, trades });
   } catch (err: any) {
     return c.json({ error: "Lỗi hệ thống khi lấy lịch sử giao dịch: " + err.message }, 500);
+  }
+});
+
+// POST /backtest/trade - Persist real-time frontend closed trade into database
+backtestRouter.post("/backtest/trade", async (c) => {
+  try {
+    const trade = await c.req.json();
+    if (!trade || !trade.id || !trade.timeframe) {
+      return c.json({ error: "Dữ liệu vị thế chốt lời / cắt lỗ không hợp lệ" }, 400);
+    }
+
+    const formattedTrade: ClosedTrade = {
+      id: trade.id,
+      timeframe: trade.timeframe.toUpperCase(),
+      position: trade.position,
+      entry: Number(trade.entry),
+      stopLoss: Number(trade.stopLoss),
+      takeProfit1: Number(trade.takeProfit1),
+      takeProfit2: Number(trade.takeProfit2),
+      status: trade.status,
+      openTime: typeof trade.openTime === "string" ? new Date(trade.openTime).getTime() : Number(trade.openTime),
+      closeTime: typeof trade.closeTime === "string" ? new Date(trade.closeTime).getTime() : Number(trade.closeTime),
+      pips: Number(trade.pips),
+      profitUsd: Number(trade.profitUsd),
+    };
+
+    // Persist to Deno KV
+    await saveClosedTrade(formattedTrade);
+
+    // Merge directly into active inMemoryTrades cache to prevent latency issues
+    inMemoryTrades = [formattedTrade, ...inMemoryTrades.filter(t => t.id !== formattedTrade.id)];
+
+    return c.json({ success: true, message: "Đã lưu vị thế chốt lời / cắt lỗ thành công vào cơ sở dữ liệu!" });
+  } catch (err: any) {
+    return c.json({ error: "Lỗi hệ thống khi lưu lịch sử giao dịch: " + err.message }, 500);
   }
 });
 
