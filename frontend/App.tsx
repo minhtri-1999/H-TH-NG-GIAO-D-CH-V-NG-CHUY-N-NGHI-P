@@ -833,25 +833,7 @@ export default function App() {
   const handleAiTabClick = () => {
     setDashTab("ai");
     setAiTriggered(true);
-
-    const currentTrade = aiActiveTrades[timeframe];
-    const isCompleted = !currentTrade || currentTrade.status === "TP" || currentTrade.status === "SL";
-
-    if (isCompleted && !aiAnalysing) {
-      triggerAiCountdown();
-    }
   };
-
-  // Automated countdown scanner on tab / timeframe switch if completed
-  useEffect(() => {
-    if (dashTab === "ai" && aiTriggered && !aiAnalysing) {
-      const currentTrade = aiActiveTrades[timeframe];
-      const isCompleted = !currentTrade || currentTrade.status === "TP" || currentTrade.status === "SL";
-      if (isCompleted) {
-        triggerAiCountdown();
-      }
-    }
-  }, [dashTab, timeframe, aiTriggered]);
 
   // Millisecond ticker state
   const [livePrice, setLivePrice] = useState<number>(4500.00);
