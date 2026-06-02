@@ -2466,12 +2466,6 @@ export default function App() {
                 <span className="sym-title">GOLD (XAU/USD)</span>
                 <span className="sym-subtitle">Vàng giao ngay / Đô la Mỹ</span>
               </div>
-              <div className="price-info">
-                <span className="price-current">${livePrice.toFixed(2)}</span>
-                <span className={`price-change ${liveChange >= 0 ? "up" : "down"}`}>
-                  {liveChange >= 0 ? "+" : ""}{liveChange.toFixed(3)}%
-                </span>
-              </div>
             </div>
 
             {/* Timeframe Selector Button Group */}
