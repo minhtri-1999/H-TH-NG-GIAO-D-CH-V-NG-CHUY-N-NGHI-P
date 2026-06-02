@@ -1780,48 +1780,35 @@ export default function App() {
 
     let winProbability = Math.min(94, Math.max(35, Math.round(baseProb + Math.abs(confluenceScore) * 0.3 + trendBonus + momentumBonus + adxBonus + divergenceBonus)));
 
-    // 3. Entry, SL, TP suggestions based on real ATR & stable closed price
-    let optimalEntryMin = 0;
-    let optimalEntryMax = 0;
+    // 3. Entry, SL, TP suggestions based on real ATR & livePrice (always real-time, non-delayed, 100% chart synchronized)
     let entryText = "";
     let sl = 0;
     let tp1 = 0;
     let tp2 = 0;
-    let entryMid = 0;
+    let entryMid = livePrice; // Anchored directly to livePrice for perfect wiggling chart sync
 
-    // Use latest closed candle price as stable baseline
-    const stablePrice = data.chart?.close && data.chart.close.length > 0
-      ? data.chart.close[data.chart.close.length - 1]
-      : livePrice;
-
-    // Dynamic suggestions computed from real market structure and ATR on Deno engine
-    if (signals && signals.suggestion && signals.suggestion.position !== "NEUTRAL") {
-      const sug = signals.suggestion;
-      sl = sug.stopLoss;
-      tp1 = sug.takeProfit1;
-      tp2 = sug.takeProfit2;
-      entryMid = sug.entry;
-      optimalEntryMin = Math.round((entryMid - 0.15 * atr) * 100) / 100;
-      optimalEntryMax = Math.round((entryMid + 0.15 * atr) * 100) / 100;
+    if (type.includes("BUY")) {
+      sl = Math.round((entryMid - 0.36 * atr) * 100) / 100;
+      tp1 = Math.round((entryMid + 0.45 * atr) * 100) / 100;
+      tp2 = Math.round((entryMid + 0.90 * atr) * 100) / 100;
+      entryText = `$${entryMid.toFixed(2)}`;
+      if (signals.strength > 0) {
+        winProbability = Math.min(94, Math.max(78, 80 + Math.round(signals.strength * 0.15)));
+      }
+    } else if (type.includes("SELL")) {
+      sl = Math.round((entryMid + 0.36 * atr) * 100) / 100;
+      tp1 = Math.round((entryMid - 0.45 * atr) * 100) / 100;
+      tp2 = Math.round((entryMid - 0.90 * atr) * 100) / 100;
       entryText = `$${entryMid.toFixed(2)}`;
       if (signals.strength > 0) {
         winProbability = Math.min(94, Math.max(78, 80 + Math.round(signals.strength * 0.15)));
       }
     } else {
-      optimalEntryMin = Math.round((type.includes("BUY") ? (stablePrice - 0.25 * atr) : stablePrice) * 100) / 100;
-      optimalEntryMax = Math.round((type.includes("BUY") ? stablePrice : (stablePrice + 0.25 * atr)) * 100) / 100;
-      entryText = `$${optimalEntryMin.toFixed(2)} - $${optimalEntryMax.toFixed(2)}`;
-      entryMid = (optimalEntryMin + optimalEntryMax) / 2;
-
-      if (type.includes("BUY")) {
-        sl = Math.round((entryMid - 1.5 * atr) * 100) / 100;
-        tp1 = Math.round((entryMid + 1.5 * atr) * 100) / 100;
-        tp2 = Math.round((entryMid + 3.0 * atr) * 100) / 100;
-      } else if (type.includes("SELL")) {
-        sl = Math.round((entryMid + 1.5 * atr) * 100) / 100;
-        tp1 = Math.round((entryMid - 1.5 * atr) * 100) / 100;
-        tp2 = Math.round((entryMid - 3.0 * atr) * 100) / 100;
-      }
+      entryMid = livePrice;
+      entryText = `$${entryMid.toFixed(2)}`;
+      sl = 0;
+      tp1 = 0;
+      tp2 = 0;
     }
 
     return {
