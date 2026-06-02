@@ -679,24 +679,28 @@ export default function App() {
 
     let entry = 0;
     let stopLoss = 0;
-    let takeProfit = 0;
+    let takeProfit1 = 0;
+    let takeProfit2 = 0;
 
     // Optimal offsets simulating retail stop hunts
     const atrOffset = 0.38 + Math.random() * 0.22; // 0.38 to 0.60 ATR offset (sweeping discount/premium zones)
     const slDist = 0.85 + Math.random() * 0.25; // tight institutional SL (0.85 to 1.1 ATR)
-    const tpDist = 2.5 + Math.random() * 0.8; // high target TP (2.5 to 3.3 ATR)
+    const tp1Dist = 1.20 + Math.random() * 0.40; // closer structural TP1 (1.2 to 1.6 ATR)
+    const tp2Dist = 2.60 + Math.random() * 0.70; // ultimate liquidity pool TP2 (2.6 to 3.3 ATR)
 
     if (position === "BUY") {
       entry = Math.round((currentPrice - atrOffset * atr) * 100) / 100;
       stopLoss = Math.round((entry - slDist * atr) * 100) / 100;
-      takeProfit = Math.round((entry + tpDist * atr) * 100) / 100;
+      takeProfit1 = Math.round((entry + tp1Dist * atr) * 100) / 100;
+      takeProfit2 = Math.round((entry + tp2Dist * atr) * 100) / 100;
     } else {
       entry = Math.round((currentPrice + atrOffset * atr) * 100) / 100;
       stopLoss = Math.round((entry + slDist * atr) * 100) / 100;
-      takeProfit = Math.round((entry - tpDist * atr) * 100) / 100;
+      takeProfit1 = Math.round((entry - tp1Dist * atr) * 100) / 100;
+      takeProfit2 = Math.round((entry - tp2Dist * atr) * 100) / 100;
     }
 
-    const rrRatio = (Math.abs(takeProfit - entry) / Math.abs(entry - stopLoss)).toFixed(1);
+    const rrRatio = (Math.abs(takeProfit2 - entry) / Math.abs(entry - stopLoss)).toFixed(1);
 
     // Dynamic, professional SMC + Price Action Rationale Vietnamese texts
     let entryReason = "";
@@ -706,11 +710,11 @@ export default function App() {
     if (position === "BUY") {
       entryReason = `Phát hiện vùng quét thanh khoản đáy (Liquidity Sweep) dưới ngưỡng hỗ trợ gần nhất tại $${(entry + 0.8).toFixed(2)}. Dòng tiền thông minh (Smart Money Concept) đang đặt bẫy săn dừng lỗ (Stop Hunt) của phe nhỏ lẻ trước khi đẩy giá tăng. Điểm BUY LIMIT được thiết lập đón đầu râu nến tại $${entry.toFixed(2)} nằm ở vùng chiết khấu (Discount Zone) của khối lệnh (Bullish Order Block).`;
       slReason = `Mức dừng lỗ (SL) được thắt chặt tại $${stopLoss.toFixed(2)}, ngay bên dưới đáy vùng quét thanh khoản thứ hai và khối lệnh tăng trưởng (Bullish Order Block). Nếu giá nến đóng dưới vùng này, cấu trúc tăng (BOS) sẽ bị vô hiệu hóa hoàn toàn, việc cắt lỗ là bắt buộc để bảo toàn vốn.`;
-      tpReason = `Mục tiêu chốt lời (TP) tại $${takeProfit.toFixed(2)} được xác định ở đỉnh cũ M15 và vùng mất cân bằng cung cầu (Fair Value Gap - FVG) giảm giá phía trên, nơi tích tụ lượng lớn thanh khoản chờ mua của thị trường. Đạt tỷ lệ rủi ro/lợi nhuận (R:R) cực cao 1:${rrRatio}.`;
+      tpReason = `Mục tiêu chốt lời 1 (TP1) tại $${takeProfit1.toFixed(2)} được đặt ở đỉnh cũ nến và chốt lời 2 (TP2) tại $${takeProfit2.toFixed(2)} ở vùng mất cân bằng cung cầu (Fair Value Gap - FVG) giảm giá phía trên, nơi tích tụ lượng lớn thanh khoản chờ mua. Khi đạt TP1, hệ thống tự động dời SL về Entry để bảo toàn lợi nhuận tối đa, đạt tỉ lệ rủi ro/lợi nhuận (R:R) lên tới 1:${rrRatio}.`;
     } else {
       entryReason = `Phát hiện bẫy quét thanh khoản đỉnh (Liquidity Sweep/Buy-side Liquidity) ở vùng kháng cự $${(entry - 0.8).toFixed(2)}. Các tổ chức lớn đang kích hoạt quét Stop Hunt các lệnh bán khống nhỏ lẻ để gom thanh khoản. Điểm SELL LIMIT được thiết lập đón đầu tại $${entry.toFixed(2)} nằm ở vùng Premium Zone tối ưu và khối lệnh giảm trưởng (Bearish Order Block).`;
       slReason = `Mức dừng lỗ (SL) thắt chặt đặt tại $${stopLoss.toFixed(2)} phía trên đỉnh quét thanh khoản. Việc vượt qua mức giá này sẽ phá vỡ cấu trúc giảm hiện tại (CHoCH tăng), vô hiệu hóa hoàn toàn kịch bản bán khống.`;
-      tpReason = `Mục tiêu chốt lời (TP) tại $${takeProfit.toFixed(2)} nằm sâu dưới đáy cũ và vùng FVG tăng giá chưa được giảm thiểu (Unmitigated Bullish FVG), bảo toàn lợi nhuận tối đa với tỷ lệ rủi ro/lợi nhuận (R:R) đạt 1:${rrRatio}.`;
+      tpReason = `Mục tiêu chốt lời 1 (TP1) tại $${takeProfit1.toFixed(2)} và chốt lời 2 (TP2) tại $${takeProfit2.toFixed(2)} nằm sâu dưới đáy cũ và vùng FVG tăng giá chưa được giảm thiểu (Unmitigated Bullish FVG). Khi giá chạm TP1, hệ thống dời SL về điểm hòa vốn (Break Even), bảo toàn lợi nhuận tối đa với tỷ lệ rủi ro/lợi nhuận (R:R) đạt 1:${rrRatio}.`;
     }
 
     const newTrade = {
@@ -719,7 +723,9 @@ export default function App() {
       type: "LIMIT",
       entry,
       stopLoss,
-      takeProfit,
+      takeProfit1,
+      takeProfit2,
+      hitTp1: false,
       status: "PENDING",
       pips: 0,
       openPrice: 0,
@@ -1421,11 +1427,33 @@ export default function App() {
           }
         } else if (activeAiTrade.status === "ACTIVE") {
           const isBuy = activeAiTrade.position === "BUY";
-          const hitTP = isBuy ? (nextPrice >= activeAiTrade.takeProfit) : (nextPrice <= activeAiTrade.takeProfit);
-          const hitSL = isBuy ? (nextPrice <= activeAiTrade.stopLoss) : (nextPrice >= activeAiTrade.stopLoss);
+          
+          // 4.1. Check if price touches TP1 to secure partial profits and move SL to Entry (Break Even)
+          if (!activeAiTrade.hitTp1) {
+            const hitTP1 = isBuy ? (nextPrice >= activeAiTrade.takeProfit1) : (nextPrice <= activeAiTrade.takeProfit1);
+            if (hitTP1) {
+              setAiActiveTrades(prev => {
+                const updated = { ...prev };
+                if (updated[timeframe] && updated[timeframe].status === "ACTIVE") {
+                  updated[timeframe] = {
+                    ...updated[timeframe],
+                    hitTp1: true,
+                    stopLoss: activeAiTrade.entry, // Move SL to Entry (Break Even)
+                  };
+                }
+                return updated;
+              });
+              playSound("buy");
+            }
+          }
 
-          if (hitTP || hitSL) {
-            const finalStatus = hitTP ? "TP" : "SL";
+          // 4.2. Check if price touches TP2 or the current Stop Loss (which may be at Entry after TP1 is hit)
+          const currentSL = activeAiTrade.hitTp1 ? activeAiTrade.entry : activeAiTrade.stopLoss;
+          const hitTP2 = isBuy ? (nextPrice >= activeAiTrade.takeProfit2) : (nextPrice <= activeAiTrade.takeProfit2);
+          const hitSL = isBuy ? (nextPrice <= currentSL) : (nextPrice >= currentSL);
+
+          if (hitTP2 || hitSL) {
+            const finalStatus = hitTP2 ? "TP" : "SL";
             let finalPips = 0;
             if (isBuy) {
               finalPips = Math.round((nextPrice - activeAiTrade.entry) * 10);
@@ -1463,9 +1491,9 @@ export default function App() {
               position: activeAiTrade.position,
               entry: activeAiTrade.entry,
               stopLoss: activeAiTrade.stopLoss,
-              takeProfit1: activeAiTrade.takeProfit,
-              takeProfit2: activeAiTrade.takeProfit,
-              status: finalStatus === "TP" ? "TP1" : "SL",
+              takeProfit1: activeAiTrade.takeProfit1,
+              takeProfit2: activeAiTrade.takeProfit2,
+              status: finalStatus === "TP" ? "TP2" : (activeAiTrade.hitTp1 ? "TP1" : "SL"),
               openTime: Date.now() - 30000,
               closeTime: Date.now(),
               pips: finalPips,
@@ -1568,8 +1596,8 @@ export default function App() {
       const isBuy = activeAiTrade.position === "BUY";
       const type = isBuy ? "BUY" : "SELL";
       const sl = activeAiTrade.stopLoss;
-      const tp1 = activeAiTrade.takeProfit;
-      const tp2 = activeAiTrade.takeProfit;
+      const tp1 = activeAiTrade.takeProfit1;
+      const tp2 = activeAiTrade.takeProfit2;
       const entryMid = activeAiTrade.entry;
       const entryText = `$${entryMid.toFixed(2)}`;
       
@@ -3445,6 +3473,20 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                                     </div>
                                   </div>
                                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    {currentTrade.hitTp1 && (
+                                      <span style={{
+                                        fontSize: "10px",
+                                        fontWeight: "bold",
+                                        padding: "3px 8px",
+                                        borderRadius: "4px",
+                                        background: "rgba(0, 230, 118, 0.15)",
+                                        color: "var(--green)",
+                                        border: "1px solid var(--green)",
+                                        animation: "aiDotBlink 1.5s infinite alternate"
+                                      }}>
+                                        🎉 ĐÃ CHẠM TP1 (DỜI SL HÒA VỐN)
+                                      </span>
+                                    )}
                                     <span style={{
                                       fontSize: "10px",
                                       fontWeight: "bold",
@@ -3475,7 +3517,7 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                                 {/* Signal values quick grid */}
                                 <div style={{
                                   display: "grid",
-                                  gridTemplateColumns: "repeat(4, 1fr)",
+                                  gridTemplateColumns: "repeat(5, 1fr)",
                                   gap: "12px",
                                   background: "rgba(255, 255, 255, 0.02)",
                                   padding: "12px",
@@ -3495,9 +3537,15 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                                     </strong>
                                   </div>
                                   <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                                    <span style={{ fontSize: "9.5px", color: "var(--text3)" }}>CHỐT LỜI MỤC TIÊU (TP)</span>
+                                    <span style={{ fontSize: "9.5px", color: "var(--text3)" }}>CHỐT LỜI 1 (TP1)</span>
                                     <strong style={{ fontSize: "14px", color: "var(--green)", fontFamily: "monospace" }}>
-                                      ${currentTrade.takeProfit.toFixed(2)}
+                                      ${currentTrade.takeProfit1.toFixed(2)}
+                                    </strong>
+                                  </div>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                    <span style={{ fontSize: "9.5px", color: "var(--text3)" }}>CHỐT LỜI 2 (TP2)</span>
+                                    <strong style={{ fontSize: "14px", color: "var(--green)", fontFamily: "monospace" }}>
+                                      ${currentTrade.takeProfit2.toFixed(2)}
                                     </strong>
                                   </div>
                                   <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
