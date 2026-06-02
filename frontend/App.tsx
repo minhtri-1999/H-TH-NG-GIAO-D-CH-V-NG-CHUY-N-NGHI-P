@@ -2475,7 +2475,7 @@ export default function App() {
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "8px", marginTop: "4px" }}>
                       <div>
                         <span className="sug-label" style={{ fontSize: "9px" }}>Tỷ lệ rủi ro/lợi nhuận:</span>
-                        <strong style={{ color: "#fff", display: "block", fontSize: "11px", marginTop: "2px", fontFamily: "monospace" }}>1:3.0 ➔ 1:3.0</strong>
+                        <strong style={{ color: "#fff", display: "block", fontSize: "11px", marginTop: "2px", fontFamily: "monospace" }}>1:1.5 ➔ 1:3.0</strong>
                       </div>
                       <div>
                         <span className="sug-label" style={{ fontSize: "9px" }}>Hệ số biến động (ATR):</span>
