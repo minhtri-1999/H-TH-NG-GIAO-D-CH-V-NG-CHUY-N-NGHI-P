@@ -231,74 +231,6 @@ async function fetchBaseGoldRealtime(): Promise<TradingViewRealtime> {
   let stochD = 50;
   let atr = 3.5;
 
-  // 1. Fetch delayed Spot Gold prices and technical indicators from TradingView cfd scanner
-  try {
-    const tvUrl = "https://scanner.tradingview.com/cfd/scan";
-    const tvResp = await fetch(tvUrl, {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-      },
-      body: JSON.stringify({
-        symbols: { tickers: ["FOREXCOM:XAUUSD"] },
-        columns: [
-          "close",
-          "change",
-          "high",
-          "low",
-          "RSI",
-          "MACD.macd",
-          "MACD.signal",
-          "EMA10",
-          "SMA20",
-          "Recommend.All",
-          "Recommend.MA",
-          "Recommend.Other",
-          "EMA20",
-          "EMA50",
-          "EMA100",
-          "EMA200",
-          "ADX",
-          "CCI20",
-          "Stoch.K",
-          "Stoch.D",
-          "ATR"
-        ]
-      })
-    });
-    if (tvResp.ok) {
-      const tvData = await tvResp.json();
-      if (tvData.data && tvData.data.length > 0) {
-        const d = tvData.data[0].d;
-        price = Number(d[0]) || price;
-        change = Number(d[1]) || change;
-        high = Number(d[2]) || high;
-        low = Number(d[3]) || low;
-        rsi = Number(d[4]) || rsi;
-        macd = Number(d[5]) || macd;
-        macdSignal = Number(d[6]) || macdSignal;
-        ema10 = Number(d[7]) || price;
-        sma20 = Number(d[8]) || price;
-        recommendAll = Number(d[9]) || recommendAll;
-        recommendMA = Number(d[10]) || recommendMA;
-        recommendOther = Number(d[11]) || recommendOther;
-        ema20 = Number(d[12]) || price;
-        ema50 = Number(d[13]) || price;
-        ema100 = Number(d[14]) || price;
-        ema200 = Number(d[15]) || price;
-        adx = Number(d[16]) || adx;
-        cci20 = Number(d[17]) || cci20;
-        stochK = Number(d[18]) || stochK;
-        stochD = Number(d[19]) || stochD;
-        atr = Number(d[20]) || atr;
-      }
-    }
-  } catch (e) {
-    console.error("Error fetching delayed TV scanner:", e);
-  }
-
-  // 2. Fetch real-time GC=F chart from Yahoo Finance to calculate dynamic real-time Spot Gold price
   try {
     const url = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d";
     const resp = await fetch(url, {
@@ -311,43 +243,38 @@ async function fetchBaseGoldRealtime(): Promise<TradingViewRealtime> {
       const result = data.chart?.result?.[0];
       const quote = result?.indicators?.quote?.[0];
       const closeList = quote?.close || [];
+      const highList = quote?.high || [];
+      const lowList = quote?.low || [];
       
       const validCloses = closeList.filter((c: any) => c !== null && !isNaN(c));
+      const validHighs = highList.filter((h: any) => h !== null && !isNaN(h));
+      const validLows = lowList.filter((l: any) => l !== null && !isNaN(l));
+      
       if (validCloses.length > 0) {
-        const currentFutures = validCloses[validCloses.length - 1];
+        const latestPrice = validCloses[validCloses.length - 1];
+        price = Math.round(latestPrice * 100) / 100;
         
-        // TradingView free scanner data is delayed by 15 minutes, so the TV scanner price is the Spot price 15 minutes ago.
-        // We get the corresponding Futures price 15 minutes ago (15 candles back).
-        const index15mAgo = Math.max(0, validCloses.length - 1 - 15);
-        const futures15mAgo = validCloses[index15mAgo];
+        // Lấy giá trị cao nhất và thấp nhất trong ngày từ nến 1m
+        if (validHighs.length > 0) {
+          high = Math.round(Math.max(...validHighs) * 100) / 100;
+        } else {
+          high = price;
+        }
+        if (validLows.length > 0) {
+          low = Math.round(Math.min(...validLows) * 100) / 100;
+        } else {
+          low = price;
+        }
         
-        // Dynamic contango/premium offset 15 minutes ago
-        const premiumOffset = futures15mAgo - price;
+        // Tính toán phần trăm thay đổi dựa trên giá đóng cửa hôm trước từ Yahoo Finance
+        const prevClose = result?.meta?.previousClose || latestPrice;
+        change = Number((((price - prevClose) / prevClose) * 100).toFixed(3));
         
-        // Replicate absolute non-delayed real-time spot price
-        const realtimeSpot = currentFutures - premiumOffset;
-        const delta = realtimeSpot - price;
-        
-        // Calibrate high, low, technical levels and daily change
-        const prevCloseSpot = price / (1 + change / 100);
-        const realtimeChange = ((realtimeSpot - prevCloseSpot) / prevCloseSpot) * 100;
-        
-        price = Math.round(realtimeSpot * 100) / 100;
-        change = Number(realtimeChange.toFixed(3));
-        high = Math.round((high + delta) * 100) / 100;
-        low = Math.round((low + delta) * 100) / 100;
-        ema10 = Math.round((ema10 + delta) * 100) / 100;
-        sma20 = Math.round((sma20 + delta) * 100) / 100;
-        ema20 = Math.round((ema20 + delta) * 100) / 100;
-        ema50 = Math.round((ema50 + delta) * 100) / 100;
-        ema100 = Math.round((ema100 + delta) * 100) / 100;
-        ema200 = Math.round((ema200 + delta) * 100) / 100;
-
-        console.log(`[Replication engine] Calibrated Spot Gold real-time price: ${price} USD (delta: ${delta.toFixed(2)} USD)`);
+        console.log(`[Yahoo Real-time Price Engine] Fetched latest GC=F price: ${price} USD (change: ${change}%)`);
       }
     }
   } catch (err: any) {
-    console.error("Failed to perform real-time gold price replication:", err);
+    console.error("Failed to fetch real-time gold price from Yahoo Finance:", err);
   }
 
   return {

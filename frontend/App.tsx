@@ -2329,7 +2329,7 @@ export default function App() {
         <aside className="sidebar">
           <header className="sb-header hide-on-mobile">
             <div className="gold-profile-card">
-              <div className="g-title">🟡 VÀNG SPOT (XAU/USD)</div>
+              <div className="g-title">🟡 VÀNG REALTIME (XAU/USD)</div>
             </div>
           </header>
 
@@ -3919,7 +3919,7 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                           HỆ THỐNG PHÂN TÍCH HỢP LƯU KỸ THUẬT HÀNG NGÀY
                         </span>
                         <h2 style={{ fontSize: "22px", fontWeight: "900", color: "#fff", margin: "6px 0", letterSpacing: "0.5px" }}>
-                          XAU/USD GOLD SPOT
+                          XAU/USD GOLD REALTIME
                         </h2>
                         <span style={{ fontSize: "12px", color: "var(--text2)" }}>
                           Thời gian cập nhật: <strong style={{ color: "var(--gold)" }}>{outlook.date}</strong> | Khung đồ thị: <strong>{outlook.timeframe}</strong>
