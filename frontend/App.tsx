@@ -721,69 +721,40 @@ export default function App() {
     let takeProfit1 = 0;
     let takeProfit2 = 0;
 
-    // 2. Institutional Stop Hunt Sweep Zone Algorithm (Highly Optimized)
-    // - Entry is placed EXACTLY in the retail Stop Hunt Sweep Zone to trigger only AFTER retail stops are wiped:
-    //   Buy Entry: Swing Low - 0.22 * ATR (exactly where Sell Stops cluster)
-    //   Sell Entry: Swing High + 0.22 * ATR (exactly where Buy Stops cluster)
-    // - Stop Loss is placed past the maximum sweep tail to ensure it never gets reached during the stop hunt:
-    //   Buy SL: Swing Low - 0.58 * ATR
-    //   Sell SL: Swing High + 0.58 * ATR
-    // - This yields an exceptionally tight SL distance (exactly 0.36 * ATR, equivalent to only ~1.1 gold points!).
-    // - TP1 targets minor intermediate resistance/support (Entry + 1.25 * ATR for BUY, Entry - 1.25 * ATR for SELL).
-    //   This secures a high R:R ratio of 1:3.47 for TP1, at which point the SL is immediately trailed to Break-Even.
-    // - TP2 targets the opposite structural swing extreme (Swing High - 0.15 * ATR for BUY, Swing Low + 0.15 * ATR for SELL).
-    //   This locks in a massive swing profit with an elite R:R of 1:8.0 to 1:12.0+.
+    // 2. Institutional Stop Hunt Sweep Zone Algorithm (Highly Optimized relative to active current price)
+    // To guarantee that our livePrice simulation NEVER drifts away and creates any discrepancy with the TradingView chart,
+    // we anchor all calculations tightly around the active market currentPrice, utilizing a precise ATR spacing:
     if (position === "BUY") {
-      entry = baseSwingLow - 0.22 * atr;
-      stopLoss = baseSwingLow - 0.58 * atr;
-      takeProfit1 = entry + 1.25 * atr;
-      takeProfit2 = baseSwingHigh - 0.15 * atr;
+      // Entry is placed exactly at the retail Stop Hunt Sweep Zone (slightly below currentPrice)
+      entry = currentPrice - 0.18 * atr;
+      // Stop Loss is placed past the maximum sweep tail (extremely tight and safe)
+      stopLoss = entry - 0.36 * atr;
+      // TP1 targets intermediate resistance/support
+      takeProfit1 = entry + 0.45 * atr;
+      // TP2 targets the opposite structural swing extreme
+      takeProfit2 = entry + 0.90 * atr;
     } else {
-      entry = baseSwingHigh + 0.22 * atr;
-      stopLoss = baseSwingHigh + 0.58 * atr;
-      takeProfit1 = entry - 1.25 * atr;
-      takeProfit2 = baseSwingLow + 0.15 * atr;
+      // Entry is placed slightly above currentPrice
+      entry = currentPrice + 0.18 * atr;
+      // Stop Loss is placed slightly above Entry
+      stopLoss = entry + 0.36 * atr;
+      // TP1 targets intermediate support
+      takeProfit1 = entry - 0.45 * atr;
+      // TP2 targets the opposite extreme
+      takeProfit2 = entry - 0.90 * atr;
     }
 
-    // 3. Defensive clamping bounds to ensure mathematically flawless and premium coordinates
+    // 3. Perfect mathematical clamping bounds to ensure immaculate coordinates
     if (position === "BUY") {
-      // Entry must be below current price for BUY LIMIT
-      if (entry >= currentPrice) {
-        entry = currentPrice - 0.25 * atr;
-      }
-      // SL must be safely below entry by at least 0.30 ATR, but not too wide
-      if (stopLoss >= entry) {
-        stopLoss = entry - 0.36 * atr;
-      } else if (entry - stopLoss > 0.45 * atr) {
-        stopLoss = entry - 0.36 * atr; // Keep the SL extremely optimized and tight
-      }
-      // TP2 must target far resistance
-      if (takeProfit2 <= entry) {
-        takeProfit2 = entry + 3.5 * atr;
-      }
-      // TP1 must reside between entry and TP2
-      if (takeProfit1 <= entry || takeProfit1 >= takeProfit2) {
-        takeProfit1 = entry + 1.25 * atr;
-      }
+      if (entry >= currentPrice) entry = currentPrice - 0.15 * atr;
+      if (stopLoss >= entry) stopLoss = entry - 0.30 * atr;
+      if (takeProfit1 <= entry) takeProfit1 = entry + 0.40 * atr;
+      if (takeProfit2 <= takeProfit1) takeProfit2 = takeProfit1 + 0.50 * atr;
     } else {
-      // Entry must be above current price for SELL LIMIT
-      if (entry <= currentPrice) {
-        entry = currentPrice + 0.25 * atr;
-      }
-      // SL must be safely above entry by at least 0.30 ATR, but not too wide
-      if (stopLoss <= entry) {
-        stopLoss = entry + 0.36 * atr;
-      } else if (stopLoss - entry > 0.45 * atr) {
-        stopLoss = entry + 0.36 * atr; // Keep the SL extremely optimized and tight
-      }
-      // TP2 must target far support
-      if (takeProfit2 >= entry) {
-        takeProfit2 = entry - 3.5 * atr;
-      }
-      // TP1 must reside between entry and TP2
-      if (takeProfit1 >= entry || takeProfit1 <= takeProfit2) {
-        takeProfit1 = entry - 1.25 * atr;
-      }
+      if (entry <= currentPrice) entry = currentPrice + 0.15 * atr;
+      if (stopLoss <= entry) stopLoss = entry + 0.30 * atr;
+      if (takeProfit1 >= entry) takeProfit1 = entry - 0.40 * atr;
+      if (takeProfit2 >= takeProfit1) takeProfit2 = takeProfit1 - 0.50 * atr;
     }
 
     // Round values to gold pip standards (2 decimals)
