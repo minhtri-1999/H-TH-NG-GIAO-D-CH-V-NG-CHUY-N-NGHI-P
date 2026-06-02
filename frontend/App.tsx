@@ -653,7 +653,7 @@ export default function App() {
       await fetch("/api/auth/logout", { method: "POST" });
       setUser(null);
       setData(null);
-      setLivePrice(4500.00);
+      setLivePrice(0);
       setLiveChange(0);
       setAuthMode("login");
       setAuthEmail("");
@@ -678,6 +678,11 @@ export default function App() {
   // Helper to trigger A.I 5-second countdown analysis
   const triggerAiCountdown = () => {
     if (aiAnalysing) return;
+    // Guard: require real chart data to be loaded first
+    if (!data?.lastPrice || data.lastPrice <= 0) {
+      console.warn("[AI Countdown] Real chart data not yet loaded. Please wait...");
+      return;
+    }
     setAiAnalysing(true);
     setAiCountdown(5);
     setAiStepText("🔍 Đang kết nối máy chủ, tải dữ liệu nến Vàng Spot XAU/USD...");
@@ -710,7 +715,13 @@ export default function App() {
 
   // Generate highly-optimized optimal LIMIT trade (SMC stop hunt zone / discount-premium sweep)
   const generateOptimalTrade = () => {
-    const currentPrice = priceRef.current || livePrice || 4500.00;
+    // CRITICAL: Always require real data.lastPrice from the API - never use fake fallback
+    const realApiPrice = data?.lastPrice || 0;
+    if (realApiPrice <= 0) {
+      console.warn("[AI Trade] No real price data loaded yet - aborting trade generation");
+      return;
+    }
+    const currentPrice = realApiPrice;
     const atr = data?.signals?.indicators?.atr || 3.2;
 
     // Choose BUY or SELL position based on real confluence signals
@@ -836,7 +847,7 @@ export default function App() {
   };
 
   // Millisecond ticker state
-  const [livePrice, setLivePrice] = useState<number>(4500.00);
+  const [livePrice, setLivePrice] = useState<number>(0); // 0 = not yet loaded from API
   const [liveChange, setLiveChange] = useState<number>(0.0);
   const [tickerActive, setTickerActive] = useState<boolean>(true);
   const [simulatedTrades, setSimulatedTrades] = useState<SimulatedTrade[]>([]);
@@ -1092,7 +1103,7 @@ export default function App() {
   }, [activeCandles, timeframe, yScaleMultiplier]);
 
   // Refs for tracking values inside ticker loop
-  const priceRef = useRef<number>(4500.00);
+  const priceRef = useRef<number>(0); // 0 = not yet loaded from API
   const dataRef = useRef<GoldSignalResponse | null>(null);
   const tickCounter = useRef<number>(0);
   const isDragging = useRef<boolean>(false);
@@ -1289,7 +1300,8 @@ export default function App() {
 
       // Smoothly guide the simulated price toward the real price from the API (even when polling)
       if (resData.lastPrice > 0) {
-        if (!dataRef.current || Math.abs(priceRef.current - resData.lastPrice) > 100) {
+        if (!dataRef.current || priceRef.current <= 0 || Math.abs(priceRef.current - resData.lastPrice) > 100) {
+          // First load or big drift: snap directly to real API price
           priceRef.current = resData.lastPrice;
         } else {
           priceRef.current = priceRef.current * 0.7 + resData.lastPrice * 0.3;
@@ -1417,6 +1429,9 @@ export default function App() {
       // 1. Random Walk price simulation around real market price (+/- 0.05 to 0.15 Gold USD)
       const current = priceRef.current;
       const realBase = data.lastPrice;
+
+      // Guard: if price not yet loaded from API, skip simulation entirely
+      if (current <= 0 || realBase <= 0) return;
 
       // Smart A.I Price Simulator: Dynamically biases price to drift towards target entry/exit points
       const activeAiTrade = aiActiveTrades[timeframe];
@@ -1785,7 +1800,8 @@ export default function App() {
     let sl = 0;
     let tp1 = 0;
     let tp2 = 0;
-    let entryMid = livePrice; // Anchored directly to livePrice for perfect wiggling chart sync
+    // IMPORTANT: Use data.lastPrice (real API price) as anchor, NOT livePrice (which is simulated wiggle)
+    let entryMid = data.lastPrice || livePrice; // Anchored to real API price for chart accuracy
 
     if (type.includes("BUY")) {
       sl = Math.round((entryMid - 0.36 * atr) * 100) / 100;
@@ -1804,7 +1820,7 @@ export default function App() {
         winProbability = Math.min(94, Math.max(78, 80 + Math.round(signals.strength * 0.15)));
       }
     } else {
-      entryMid = livePrice;
+      entryMid = data.lastPrice || livePrice;
       entryText = `$${entryMid.toFixed(2)}`;
       sl = 0;
       tp1 = 0;

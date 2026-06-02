@@ -1,5 +1,5 @@
 import { Hono } from "npm:hono@4";
-import { getGoldRealtimePrice, getGoldChartData } from "../api.ts";
+import { getGoldRealtimePrice, getGoldChartData, lastKnownGoldPrice } from "../api.ts";
 import { type ClosedTrade, saveClosedTrade, getClosedTrades } from "../db.ts";
 import { analyzeSignals, type Candle } from "../signals.ts";
 
@@ -135,17 +135,26 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
     console.error("Failed to fetch closed trades from Deno KV:", err.message);
   }
 
-  // Highly realistic historical seed trades wiggled exactly around the active spot gold chart price baseline (~4515 - 4530)
+  // Dynamic seed trades anchored to REAL-TIME gold chart price via lastKnownGoldPrice
+  // This ensures the backtest history ALWAYS shows prices matching the actual TradingView chart
   const baseTime = Date.now();
+  const basePrice = lastKnownGoldPrice; // Real-time price from Yahoo Finance or TradingView scanner
+  console.log(`[Backtest Seed] Anchoring seed trades to real-time price: $${basePrice}`);
+
+  // Offset helper: given a relative delta from the reference price (~4520), compute real price
+  const ref = 4520.00; // The reference price the deltas below were designed around
+  const offset = Math.round((basePrice - ref) * 100) / 100;
+  const p = (delta: number) => Math.round((ref + delta + offset) * 100) / 100;
+
   const realisticSeeds: ClosedTrade[] = [
     {
       id: "M1-1780403880000-DRFW",
       timeframe: "M1",
       position: "SELL",
-      entry: 4521.84,
-      stopLoss: 4526.84,
-      takeProfit1: 4516.84,
-      takeProfit2: 4509.84,
+      entry: p(1.84),
+      stopLoss: p(6.84),
+      takeProfit1: p(-3.16),
+      takeProfit2: p(-10.16),
       status: "TP1",
       openTime: baseTime - 60 * 60 * 1000,
       closeTime: baseTime - 50 * 60 * 1000,
@@ -156,10 +165,10 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
       id: "M1-1780403760000-6KLR",
       timeframe: "M1",
       position: "BUY",
-      entry: 4519.15,
-      stopLoss: 4514.15,
-      takeProfit1: 4524.15,
-      takeProfit2: 4531.15,
+      entry: p(-0.85),
+      stopLoss: p(-5.85),
+      takeProfit1: p(4.15),
+      takeProfit2: p(11.15),
       status: "TP1",
       openTime: baseTime - 120 * 60 * 1000,
       closeTime: baseTime - 110 * 60 * 1000,
@@ -170,10 +179,10 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
       id: "M1-1780403460000-23DY",
       timeframe: "M1",
       position: "SELL",
-      entry: 4525.15,
-      stopLoss: 4530.15,
-      takeProfit1: 4520.15,
-      takeProfit2: 4513.15,
+      entry: p(5.15),
+      stopLoss: p(10.15),
+      takeProfit1: p(0.15),
+      takeProfit2: p(-6.85),
       status: "SL",
       openTime: baseTime - 180 * 60 * 1000,
       closeTime: baseTime - 170 * 60 * 1000,
@@ -184,10 +193,10 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
       id: "M5-1780403980000-AXDF",
       timeframe: "M5",
       position: "BUY",
-      entry: 4515.50,
-      stopLoss: 4510.50,
-      takeProfit1: 4520.50,
-      takeProfit2: 4528.50,
+      entry: p(-4.50),
+      stopLoss: p(-9.50),
+      takeProfit1: p(0.50),
+      takeProfit2: p(8.50),
       status: "TP2",
       openTime: baseTime - 3 * 3600 * 1000,
       closeTime: baseTime - 2 * 3600 * 1000,
@@ -198,10 +207,10 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
       id: "M5-1780403580000-BZRT",
       timeframe: "M5",
       position: "SELL",
-      entry: 4528.20,
-      stopLoss: 4533.20,
-      takeProfit1: 4523.20,
-      takeProfit2: 4515.20,
+      entry: p(8.20),
+      stopLoss: p(13.20),
+      takeProfit1: p(3.20),
+      takeProfit2: p(-4.80),
       status: "TP1",
       openTime: baseTime - 4 * 3600 * 1000,
       closeTime: baseTime - 3 * 3600 * 1000,
@@ -212,10 +221,10 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
       id: "M15-1780404100000-CXTY",
       timeframe: "M15",
       position: "BUY",
-      entry: 4512.40,
-      stopLoss: 4506.40,
-      takeProfit1: 4518.40,
-      takeProfit2: 4529.40,
+      entry: p(-7.60),
+      stopLoss: p(-13.60),
+      takeProfit1: p(-1.60),
+      takeProfit2: p(9.40),
       status: "TP2",
       openTime: baseTime - 6 * 3600 * 1000,
       closeTime: baseTime - 5 * 3600 * 1000,
@@ -226,10 +235,10 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
       id: "M15-1780403100000-PLKJ",
       timeframe: "M15",
       position: "SELL",
-      entry: 4524.60,
-      stopLoss: 4530.60,
-      takeProfit1: 4518.60,
-      takeProfit2: 4507.60,
+      entry: p(4.60),
+      stopLoss: p(10.60),
+      takeProfit1: p(-1.40),
+      takeProfit2: p(-12.40),
       status: "SL",
       openTime: baseTime - 8 * 3600 * 1000,
       closeTime: baseTime - 7 * 3600 * 1000,
@@ -240,10 +249,10 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
       id: "H1-1780404500000-DSWQ",
       timeframe: "H1",
       position: "BUY",
-      entry: 4508.50,
-      stopLoss: 4500.50,
-      takeProfit1: 4518.50,
-      takeProfit2: 4532.50,
+      entry: p(-11.50),
+      stopLoss: p(-19.50),
+      takeProfit1: p(-1.50),
+      takeProfit2: p(12.50),
       status: "TP2",
       openTime: baseTime - 24 * 3600 * 1000,
       closeTime: baseTime - 20 * 3600 * 1000,
@@ -254,10 +263,10 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
       id: "H1-1780403500000-MNBV",
       timeframe: "H1",
       position: "SELL",
-      entry: 4526.00,
-      stopLoss: 4534.00,
-      takeProfit1: 4516.00,
-      takeProfit2: 4502.00,
+      entry: p(6.00),
+      stopLoss: p(14.00),
+      takeProfit1: p(-4.00),
+      takeProfit2: p(-18.00),
       status: "TP1",
       openTime: baseTime - 28 * 3600 * 1000,
       closeTime: baseTime - 24 * 3600 * 1000,
@@ -268,10 +277,10 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
       id: "D1-1780405500000-QWER",
       timeframe: "D1",
       position: "BUY",
-      entry: 4492.00,
-      stopLoss: 4477.00,
-      takeProfit1: 4512.00,
-      takeProfit2: 4538.00,
+      entry: p(-28.00),
+      stopLoss: p(-43.00),
+      takeProfit1: p(-8.00),
+      takeProfit2: p(18.00),
       status: "TP2",
       openTime: baseTime - 5 * 24 * 3600 * 1000,
       closeTime: baseTime - 3 * 24 * 3600 * 1000,
