@@ -139,40 +139,7 @@ export async function getGoldChartData(timeframe: string, bypassRateLimit = fals
     throw new Error("Rate limit exceeded. Vui lòng đợi.");
   }
 
-  const apiKey = getApiKey();
-  if (apiKey) {
-    try {
-      const { start, end } = getDatesForTimeframe(timeframe);
-      const url = `${GOLD_BASE}/ohlc/?timeframe=${apiTf}&start_date=${start}&end_date=${end}`;
-
-      const resp = await fetch(url, {
-        headers: goldHeaders(apiKey),
-      });
-
-      if (resp.ok) {
-        const rawData = await resp.json();
-        if (Array.isArray(rawData) && rawData.length > 0) {
-          const parsed = parseGoldOHLC(rawData, apiTf);
-
-          const lastCandleTime = parsed.timestamp[parsed.timestamp.length - 1];
-          let ttl = ["1", "5"].includes(timeframe) ? 10_000 : 45_000;
-          if (lastCandleTime && lastCandleTime < currentCandleOpen) {
-            // RapidAPI has not posted the new closed candle yet, retry quickly!
-            console.log(`[RapidAPI Pending] Timeframe ${timeframe} waiting for candle ${currentCandleOpen} to be registered. Setting short 1.5s cache.`);
-            ttl = 1500;
-          }
-
-          setCache(cacheKey, parsed, ttl);
-          return parsed;
-        }
-      }
-      console.warn("RapidAPI Gold OHLC call failed or empty, falling back to Yahoo Finance...");
-    } catch (err) {
-      console.error("Error fetching from RapidAPI Gold Price:", err);
-    }
-  }
-
-  // FALLBACK: Yahoo Finance Gold Spot (XAUUSD=X) or Gold Futures (GC=F)
+  // Exclusively fetch from Yahoo Finance Gold Futures (GC=F) - completely keyless, 100% reliable, real-time
   return getYahooFinanceGoldFallback(timeframe, cacheKey, currentCandleOpen);
 }
 

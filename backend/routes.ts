@@ -440,14 +440,17 @@ api.get("/signals/:symbol{.+}", async (c) => {
         multiTimeframeSignals[tf] = signals.type;
       } else {
         try {
-          const tfChart = await getGoldChartData(tf);
-          const tfCandles: Candle[] = tfChart.timestamp.map((t, idx) => ({
+          const tfChartRaw = await getGoldChartData(tf);
+          const tfLastChartClose = tfChartRaw.close.length > 0 ? tfChartRaw.close[tfChartRaw.close.length - 1] : 0;
+          const tfOffset = tfLastChartClose > 0 ? rt.price - tfLastChartClose : 0;
+
+          const tfCandles: Candle[] = tfChartRaw.timestamp.map((t, idx) => ({
             time: t,
-            open: tfChart.open[idx] ?? 0,
-            high: tfChart.high[idx] ?? 0,
-            low: tfChart.low[idx] ?? 0,
-            close: tfChart.close[idx] ?? 0,
-            volume: tfChart.volume[idx] ?? 0,
+            open: (tfChartRaw.open[idx] ?? 0) + tfOffset,
+            high: (tfChartRaw.high[idx] ?? 0) + tfOffset,
+            low: (tfChartRaw.low[idx] ?? 0) + tfOffset,
+            close: (tfChartRaw.close[idx] ?? 0) + tfOffset,
+            volume: tfChartRaw.volume[idx] ?? 0,
           })).filter(c => c.open > 0 && c.close > 0);
 
           const tfInterval = getIntervalInSeconds(tf);
