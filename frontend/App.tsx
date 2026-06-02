@@ -337,12 +337,21 @@ export default function App() {
     if (!saved) return {};
     try {
       const parsed = JSON.parse(saved);
-      // Migrate old trades to support takeProfit1 and takeProfit2
+      // Migrate old trades to support distinct takeProfit1 and takeProfit2
       for (const tf of Object.keys(parsed)) {
         const t = parsed[tf];
-        if (t && t.takeProfit && !t.takeProfit1) {
-          t.takeProfit1 = t.takeProfit;
-          t.takeProfit2 = t.takeProfit;
+        if (t && t.takeProfit) {
+          // If no takeProfit1 exists, or if both are identical, calculate a proper split
+          if (!t.takeProfit1 || t.takeProfit1 === t.takeProfit2) {
+            const isBuy = t.position === "BUY";
+            // TP1 will be the original conservative target
+            t.takeProfit1 = t.takeProfit;
+            // TP2 will be a further target split by a realistic 8.5 to 13.5 gold points offset
+            const offset = 8.5 + Math.random() * 5.0;
+            t.takeProfit2 = isBuy
+              ? Math.round((t.takeProfit1 + offset) * 100) / 100
+              : Math.round((t.takeProfit1 - offset) * 100) / 100;
+          }
         }
       }
       return parsed;
