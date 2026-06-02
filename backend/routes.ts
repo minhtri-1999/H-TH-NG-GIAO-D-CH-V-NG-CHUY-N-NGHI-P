@@ -4,7 +4,7 @@
 import { Hono } from "npm:hono@4";
 import { getCookie, setCookie, deleteCookie } from "npm:hono@4/cookie";
 import { getGoldChartData, getGoldRealtimePrice } from "./api.ts";
-import { analyzeSignals, type Candle } from "./signals.ts";
+import { analyzeSignals, type Candle, calcSMA, calcEMA, calcRSI, calcMACD, calcATR } from "./signals.ts";
 import { analyzeAdvanced } from "./advanced_analysis.ts";
 import { generateMarketOutlook } from "./market_outlook.ts";
 import {
@@ -335,12 +335,16 @@ api.get("/quote/:symbol{.+}", async (c) => {
 // Trading signals with advanced XAUUSD gold analysis
 api.get("/signals/:symbol{.+}", async (c) => {
   const timeframe = c.req.query("tf") || "1D";
+  const livePriceParam = c.req.query("livePrice");
+  const clientLivePrice = livePriceParam ? parseFloat(livePriceParam) : 0;
+
   try {
     const chartRaw = await getGoldChartData(timeframe);
     const rt = await getGoldRealtimePrice();
+    const currentSpotPrice = clientLivePrice > 0 ? clientLivePrice : rt.price;
 
     const lastChartClose = chartRaw.close.length > 0 ? chartRaw.close[chartRaw.close.length - 1] : 0;
-    const offset = lastChartClose > 0 ? rt.price - lastChartClose : 0;
+    const offset = lastChartClose > 0 ? currentSpotPrice - lastChartClose : 0;
 
     const chart = {
       timestamp: chartRaw.timestamp,
@@ -360,6 +364,37 @@ api.get("/signals/:symbol{.+}", async (c) => {
       volume: chart.volume[i] ?? 0,
     })).filter(c => c.open > 0 && c.close > 0);
 
+    const closes = candles.map(cand => cand.close);
+    const lastIdx = closes.length - 1;
+
+    // Tính toán trực tiếp chỉ báo kỹ thuật thời gian thực từ nến đã hiệu chuẩn
+    const computedRsi = lastIdx >= 0 ? calcRSI(closes) : rt.rsi;
+    const computedMacd = lastIdx >= 0 ? calcMACD(closes) : { macd: rt.macd, signal: rt.macdSignal, histogram: 0 };
+    const computedAtr = lastIdx >= 0 ? calcATR(candles) : rt.atr;
+
+    const computedEma10 = lastIdx >= 0 ? calcEMA(closes, 10).pop() ?? currentSpotPrice : currentSpotPrice;
+    const computedSma20 = lastIdx >= 0 ? calcSMA(closes, 20).pop() ?? currentSpotPrice : currentSpotPrice;
+    const computedEma20 = lastIdx >= 0 ? calcEMA(closes, 20).pop() ?? currentSpotPrice : currentSpotPrice;
+    const computedEma50 = lastIdx >= 0 ? calcEMA(closes, 50).pop() ?? currentSpotPrice : currentSpotPrice;
+    const computedEma100 = lastIdx >= 0 ? calcEMA(closes, 100).pop() ?? currentSpotPrice : currentSpotPrice;
+    const computedEma200 = lastIdx >= 0 ? calcEMA(closes, 200).pop() ?? currentSpotPrice : currentSpotPrice;
+
+    // Tạo đối tượng rt được hiệu chuẩn (calibratedRt) để đưa vào các phân tích nâng cao
+    const calibratedRt = {
+      ...rt,
+      price: currentSpotPrice,
+      rsi: Math.round(computedRsi * 10) / 10,
+      macd: Math.round(computedMacd.macd * 100) / 100,
+      macdSignal: Math.round(computedMacd.signal * 100) / 100,
+      atr: Math.round(computedAtr * 100) / 100,
+      ema10: Math.round(computedEma10 * 100) / 100,
+      sma20: Math.round(computedSma20 * 100) / 100,
+      ema20: Math.round(computedEma20 * 100) / 100,
+      ema50: Math.round(computedEma50 * 100) / 100,
+      ema100: Math.round(computedEma100 * 100) / 100,
+      ema200: Math.round(computedEma200 * 100) / 100,
+    };
+
     const nowSec = Math.floor(Date.now() / 1000);
     const intervalSec = getIntervalInSeconds(timeframe);
     const currentCandleOpen = Math.floor(nowSec / intervalSec) * intervalSec;
@@ -372,7 +407,7 @@ api.get("/signals/:symbol{.+}", async (c) => {
         symbol: "XAUUSD",
         timeframe,
         candleCount: candles.length,
-        lastPrice: rt.price,
+        lastPrice: currentSpotPrice,
         priceChange: rt.change,
         dayHigh: rt.high,
         dayLow: rt.low,
@@ -380,23 +415,23 @@ api.get("/signals/:symbol{.+}", async (c) => {
         multiTimeframeSignals: cached.multiTimeframeSignals,
         chart, // dynamic raw OHLCV for smooth charts
         tradingViewAnalysis: {
-          rsi: rt.rsi,
-          macd: rt.macd,
-          macdSignal: rt.macdSignal,
-          ema10: rt.ema10,
-          sma20: rt.sma20,
+          rsi: calibratedRt.rsi,
+          macd: calibratedRt.macd,
+          macdSignal: calibratedRt.macdSignal,
+          ema10: calibratedRt.ema10,
+          sma20: calibratedRt.sma20,
           recommendAll: rt.recommendAll,
           recommendMA: rt.recommendMA,
           recommendOther: rt.recommendOther,
-          ema20: rt.ema20,
-          ema50: rt.ema50,
-          ema100: rt.ema100,
-          ema200: rt.ema200,
+          ema20: calibratedRt.ema20,
+          ema50: calibratedRt.ema50,
+          ema100: calibratedRt.ema100,
+          ema200: calibratedRt.ema200,
           adx: rt.adx,
           cci20: rt.cci20,
           stochK: rt.stochK,
           stochD: rt.stochD,
-          atr: rt.atr,
+          atr: calibratedRt.atr,
         },
         advancedAnalysis: cached.advancedAnalysis,
         marketOutlook: cached.marketOutlook,
@@ -408,7 +443,7 @@ api.get("/signals/:symbol{.+}", async (c) => {
     const finalCandles = closedCandles.length >= 50 ? closedCandles : candles;
 
     const signals = analyzeSignals(finalCandles);
-    const advancedAnalysis = analyzeAdvanced(finalCandles, rt);
+    const advancedAnalysis = analyzeAdvanced(finalCandles, calibratedRt);
 
     // Calculate H1 Market Outlook dynamically
     let h1Candles = finalCandles;
@@ -416,7 +451,7 @@ api.get("/signals/:symbol{.+}", async (c) => {
       try {
         const h1ChartRaw = await getGoldChartData("60");
         const h1LastChartClose = h1ChartRaw.close.length > 0 ? h1ChartRaw.close[h1ChartRaw.close.length - 1] : 0;
-        const h1Offset = h1LastChartClose > 0 ? rt.price - h1LastChartClose : 0;
+        const h1Offset = h1LastChartClose > 0 ? currentSpotPrice - h1LastChartClose : 0;
         
         h1Candles = h1ChartRaw.timestamp.map((t, idx) => ({
           time: t,
@@ -430,7 +465,7 @@ api.get("/signals/:symbol{.+}", async (c) => {
         h1Candles = candles;
       }
     }
-    const marketOutlook = generateMarketOutlook(h1Candles, rt);
+    const marketOutlook = generateMarketOutlook(h1Candles, calibratedRt);
 
     // Calculate Multi-Timeframe Signals for M1, M5, M15, 1H, 1D
     const timeframes = ["1", "5", "15", "60", "1D"];
@@ -442,7 +477,7 @@ api.get("/signals/:symbol{.+}", async (c) => {
         try {
           const tfChartRaw = await getGoldChartData(tf);
           const tfLastChartClose = tfChartRaw.close.length > 0 ? tfChartRaw.close[tfChartRaw.close.length - 1] : 0;
-          const tfOffset = tfLastChartClose > 0 ? rt.price - tfLastChartClose : 0;
+          const tfOffset = tfLastChartClose > 0 ? currentSpotPrice - tfLastChartClose : 0;
 
           const tfCandles: Candle[] = tfChartRaw.timestamp.map((t, idx) => ({
             time: t,
@@ -484,7 +519,7 @@ api.get("/signals/:symbol{.+}", async (c) => {
       symbol: "XAUUSD",
       timeframe,
       candleCount: candles.length,
-      lastPrice: rt.price,
+      lastPrice: currentSpotPrice,
       priceChange: rt.change,
       dayHigh: rt.high,
       dayLow: rt.low,
@@ -492,23 +527,23 @@ api.get("/signals/:symbol{.+}", async (c) => {
       multiTimeframeSignals,
       chart,
       tradingViewAnalysis: {
-        rsi: rt.rsi,
-        macd: rt.macd,
-        macdSignal: rt.macdSignal,
-        ema10: rt.ema10,
-        sma20: rt.sma20,
+        rsi: calibratedRt.rsi,
+        macd: calibratedRt.macd,
+        macdSignal: calibratedRt.macdSignal,
+        ema10: calibratedRt.ema10,
+        sma20: calibratedRt.sma20,
         recommendAll: rt.recommendAll,
         recommendMA: rt.recommendMA,
         recommendOther: rt.recommendOther,
-        ema20: rt.ema20,
-        ema50: rt.ema50,
-        ema100: rt.ema100,
-        ema200: rt.ema200,
+        ema20: calibratedRt.ema20,
+        ema50: calibratedRt.ema50,
+        ema100: calibratedRt.ema100,
+        ema200: calibratedRt.ema200,
         adx: rt.adx,
         cci20: rt.cci20,
         stochK: rt.stochK,
         stochD: rt.stochD,
-        atr: rt.atr,
+        atr: calibratedRt.atr,
       },
       advancedAnalysis,
       marketOutlook,

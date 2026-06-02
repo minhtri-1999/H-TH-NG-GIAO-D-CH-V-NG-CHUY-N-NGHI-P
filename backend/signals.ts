@@ -39,7 +39,7 @@ export interface Signal {
   };
 }
 
-function calcSMA(data: number[], period: number): number[] {
+export function calcSMA(data: number[], period: number): number[] {
   const result: number[] = [];
   for (let i = 0; i < data.length; i++) {
     if (i < period - 1) { result.push(NaN); continue; }
@@ -49,7 +49,7 @@ function calcSMA(data: number[], period: number): number[] {
   return result;
 }
 
-function calcEMA(data: number[], period: number): number[] {
+export function calcEMA(data: number[], period: number): number[] {
   const result: number[] = [];
   const k = 2 / (period + 1);
   let ema = data[0];
@@ -61,7 +61,7 @@ function calcEMA(data: number[], period: number): number[] {
   return result;
 }
 
-function calcRSI(closes: number[], period = 14): number {
+export function calcRSI(closes: number[], period = 14): number {
   if (closes.length < period + 1) return 50;
   let gains = 0, losses = 0;
   for (let i = closes.length - period; i < closes.length; i++) {
@@ -74,7 +74,7 @@ function calcRSI(closes: number[], period = 14): number {
   return 100 - (100 / (1 + rs));
 }
 
-function calcMACD(closes: number[]): { macd: number; signal: number; histogram: number } {
+export function calcMACD(closes: number[]): { macd: number; signal: number; histogram: number } {
   const ema12 = calcEMA(closes, 12);
   const ema26 = calcEMA(closes, 26);
   const macdLine = ema12.map((v, i) => v - ema26[i]);
@@ -109,7 +109,7 @@ function calcBollingerBands(closes: number[], period = 20, stdDev = 2) {
 }
 
 // Compute Average True Range (ATR) to calculate logical TP and SL for Gold
-function calcATR(candles: Candle[], period = 14): number {
+export function calcATR(candles: Candle[], period = 14): number {
   if (candles.length < period) return 3.5; // default 3.5 gold pips
   const trs: number[] = [];
   for (let i = 1; i < candles.length; i++) {

@@ -1280,7 +1280,7 @@ export default function App() {
     if (!isPolling) setLoading(true);
     if (!isPolling) setError(null);
     try {
-      const resp = await fetch(`/api/signals/XAUUSD?tf=${timeframe}`);
+      const resp = await fetch(`/api/signals/XAUUSD?tf=${timeframe}&livePrice=${priceRef.current || livePrice}`);
       if (!resp.ok) throw new Error("Không thể kết nối đến server API Gold");
       const resData: GoldSignalResponse = await resp.json();
       setError(null); // Clear connection error upon success
