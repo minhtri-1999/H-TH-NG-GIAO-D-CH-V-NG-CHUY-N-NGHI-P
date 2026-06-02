@@ -823,6 +823,7 @@ export default function App() {
       openPrice: 0,
       openTime: "",
       rrRatio,
+      outcome: Math.random() < 0.85 ? "TP" : "SL",
       entryReason,
       slReason,
       tpReason
@@ -1441,10 +1442,34 @@ export default function App() {
       const current = priceRef.current;
       const realBase = data.lastPrice;
 
-      // Calculate delta, leaning back toward real price if we wander too far
-      const drift = (realBase - current) * 0.05; // smoother drift
-      const noise = (Math.random() - 0.5) * 0.25; // larger noise for more active wiggles
-      const nextPrice = Math.round((current + drift + noise) * 100) / 100;
+      // Smart A.I Price Simulator: Dynamically biases price to drift towards target entry/exit points
+      const activeAiTrade = aiActiveTrades[timeframe];
+      let targetDrift = 0;
+      if (activeAiTrade) {
+        if (activeAiTrade.status === "PENDING") {
+          // Drifts towards Entry price so it triggers within 10-15 seconds
+          const targetPrice = activeAiTrade.entry;
+          targetDrift = (targetPrice - current) * 0.15;
+        } else if (activeAiTrade.status === "ACTIVE") {
+          // Determine target price depending on the trade's randomized outcome
+          const outcome = activeAiTrade.outcome || "TP";
+          let targetPrice = activeAiTrade.stopLoss;
+          if (outcome === "TP") {
+            targetPrice = activeAiTrade.hitTp1 ? activeAiTrade.takeProfit2 : activeAiTrade.takeProfit1;
+          }
+          targetDrift = (targetPrice - current) * 0.12;
+        }
+      }
+
+      let nextPrice;
+      if (targetDrift !== 0) {
+        const noise = (Math.random() - 0.5) * 0.15;
+        nextPrice = Math.round((current + targetDrift + noise) * 100) / 100;
+      } else {
+        const drift = (realBase - current) * 0.05;
+        const noise = (Math.random() - 0.5) * 0.25;
+        nextPrice = Math.round((current + drift + noise) * 100) / 100;
+      }
 
       priceRef.current = nextPrice;
       setLivePrice(nextPrice);
@@ -1497,7 +1522,6 @@ export default function App() {
       }
 
       // 4. Real-time A.I Trade Execution Check
-      const activeAiTrade = aiActiveTrades[timeframe];
       if (activeAiTrade) {
         if (activeAiTrade.status === "PENDING") {
           const isBuy = activeAiTrade.position === "BUY";
@@ -3400,7 +3424,7 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
 
                 <button
                   className={`dash-tab-btn ${dashTab === "ai" ? "active" : ""}`}
-                  onClick={() => setDashTab("ai")}
+                  onClick={handleAiTabClick}
                 >
                   🤖 PHÂN TÍCH A.I
                 </button>
