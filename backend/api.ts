@@ -5,19 +5,6 @@ export function adjustGoldPrice(raw: number): number {
   return Math.round(raw * 100) / 100;
 }
 
-const GOLD_HOST = "gold-price-xauusd-ohlc-api.p.rapidapi.com";
-const GOLD_BASE = `https://${GOLD_HOST}`;
-
-function getApiKey(): string | null {
-  return Deno.env.get("RAPIDAPI_KEY") || null;
-}
-
-const goldHeaders = (key: string) => ({
-  "Content-Type": "application/json",
-  "x-rapidapi-host": GOLD_HOST,
-  "x-rapidapi-key": key,
-});
-
 // In-memory cache
 const cache = new Map<string, { data: unknown; expires: number }>();
 
@@ -67,38 +54,6 @@ const TF_MAP: Record<string, string> = {
   "1M": "MN1",
 };
 
-// Date Formatter
-function formatDate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-// Calculate appropriate ranges for Gold Price API
-function getDatesForTimeframe(tf: string): { start: string; end: string } {
-  const end = new Date();
-  const start = new Date();
-
-  if (tf === "1" || tf === "M1") {
-    start.setDate(end.getDate() - 3);
-  } else if (tf === "5" || tf === "M5") {
-    start.setDate(end.getDate() - 7);
-  } else if (tf === "15" || tf === "M15") {
-    start.setDate(end.getDate() - 20);
-  } else if (tf === "60" || tf === "H1") {
-    start.setDate(end.getDate() - 60);
-  } else if (tf === "1D" || tf === "D1") {
-    start.setDate(end.getDate() - 365);
-  } else if (tf === "1W" || tf === "W1") {
-    start.setDate(end.getDate() - 1000);
-  } else {
-    start.setDate(end.getDate() - 3000); // 1M / MN1
-  }
-
-  return { start: formatDate(start), end: formatDate(end) };
-}
-
 function getIntervalInSeconds(timeframe: string): number {
   if (timeframe === "1" || timeframe === "M1") return 60;
   if (timeframe === "5" || timeframe === "M5") return 300;
@@ -142,46 +97,6 @@ export async function getGoldChartData(timeframe: string, bypassRateLimit = fals
   // Exclusively fetch from Yahoo Finance Gold Futures (GC=F) - completely keyless, 100% reliable, real-time
   return getYahooFinanceGoldFallback(timeframe, cacheKey, currentCandleOpen);
 }
-
-// Parse RapidAPI Gold Response to standard format
-function parseGoldOHLC(data: any[], apiTf: string): GoldChartResult {
-  // Sort candles chronologically
-  const sorted = [...data].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
-
-  const result: GoldChartResult = {
-    timestamp: [],
-    open: [],
-    high: [],
-    low: [],
-    close: [],
-    volume: [],
-  };
-
-  for (const item of sorted) {
-    const ts = Math.floor(new Date(item.time).getTime() / 1000);
-    if (!isNaN(ts)) {
-      result.timestamp.push(ts);
-      result.open.push(adjustGoldPrice(Number(item.open) || 0));
-      result.high.push(adjustGoldPrice(Number(item.high) || 0));
-      result.low.push(adjustGoldPrice(Number(item.low) || 0));
-      result.close.push(adjustGoldPrice(Number(item.close) || 0));
-      result.volume.push(Number(item.tick_volume) || Number(item.real_volume) || 0);
-    }
-  }
-
-  return result;
-}
-
-// Coinbase granularities for PAXG-USD fallback (highly robust US-regulated endpoint, never geoblocks Deno Deploy)
-const COINBASE_GRANULARITY: Record<string, number> = {
-  "1": 60,
-  "5": 300,
-  "15": 900,
-  "60": 3600,
-  "1D": 86400,
-  "1W": 86400,
-  "1M": 86400,
-};
 
 const YAHOO_INTERVALS: Record<string, { interval: string; range: string }> = {
   "1": { interval: "1m", range: "5d" },
