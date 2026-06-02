@@ -334,7 +334,21 @@ export default function App() {
   // Premium A.I Analysis & Optimal Trade States
   const [aiActiveTrades, setAiActiveTrades] = useState<Record<string, any>>(() => {
     const saved = localStorage.getItem("ai_active_trades");
-    return saved ? JSON.parse(saved) : {};
+    if (!saved) return {};
+    try {
+      const parsed = JSON.parse(saved);
+      // Migrate old trades to support takeProfit1 and takeProfit2
+      for (const tf of Object.keys(parsed)) {
+        const t = parsed[tf];
+        if (t && t.takeProfit && !t.takeProfit1) {
+          t.takeProfit1 = t.takeProfit;
+          t.takeProfit2 = t.takeProfit;
+        }
+      }
+      return parsed;
+    } catch (_) {
+      return {};
+    }
   });
   const [aiAnalysing, setAiAnalysing] = useState<boolean>(false);
   const [aiCountdown, setAiCountdown] = useState<number>(0);
@@ -1595,10 +1609,10 @@ export default function App() {
     if (activeAiTrade && (activeAiTrade.status === "PENDING" || activeAiTrade.status === "ACTIVE")) {
       const isBuy = activeAiTrade.position === "BUY";
       const type = isBuy ? "BUY" : "SELL";
-      const sl = activeAiTrade.stopLoss;
-      const tp1 = activeAiTrade.takeProfit1;
-      const tp2 = activeAiTrade.takeProfit2;
-      const entryMid = activeAiTrade.entry;
+      const sl = activeAiTrade.stopLoss ?? 0;
+      const tp1 = activeAiTrade.takeProfit1 ?? activeAiTrade.takeProfit ?? 0;
+      const tp2 = activeAiTrade.takeProfit2 ?? activeAiTrade.takeProfit ?? 0;
+      const entryMid = activeAiTrade.entry ?? 0;
       const entryText = `$${entryMid.toFixed(2)}`;
       
       const winProbability = 88; // Premium 88% probability
@@ -3527,25 +3541,25 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                                   <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                                     <span style={{ fontSize: "9.5px", color: "var(--text3)" }}>MỨC CHỜ VÀO (ENTRY)</span>
                                     <strong style={{ fontSize: "14px", color: "var(--gold)", fontFamily: "monospace" }}>
-                                      ${currentTrade.entry.toFixed(2)}
+                                      ${(currentTrade.entry ?? 0).toFixed(2)}
                                     </strong>
                                   </div>
                                   <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                                     <span style={{ fontSize: "9.5px", color: "var(--text3)" }}>CẮT LỖ AN TOÀN (SL)</span>
                                     <strong style={{ fontSize: "14px", color: "var(--red)", fontFamily: "monospace" }}>
-                                      ${currentTrade.stopLoss.toFixed(2)}
+                                      ${(currentTrade.stopLoss ?? 0).toFixed(2)}
                                     </strong>
                                   </div>
                                   <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                                     <span style={{ fontSize: "9.5px", color: "var(--text3)" }}>CHỐT LỜI 1 (TP1)</span>
                                     <strong style={{ fontSize: "14px", color: "var(--green)", fontFamily: "monospace" }}>
-                                      ${currentTrade.takeProfit1.toFixed(2)}
+                                      ${(currentTrade.takeProfit1 ?? currentTrade.takeProfit ?? 0).toFixed(2)}
                                     </strong>
                                   </div>
                                   <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                                     <span style={{ fontSize: "9.5px", color: "var(--text3)" }}>CHỐT LỜI 2 (TP2)</span>
                                     <strong style={{ fontSize: "14px", color: "var(--green)", fontFamily: "monospace" }}>
-                                      ${currentTrade.takeProfit2.toFixed(2)}
+                                      ${(currentTrade.takeProfit2 ?? currentTrade.takeProfit ?? 0).toFixed(2)}
                                     </strong>
                                   </div>
                                   <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
