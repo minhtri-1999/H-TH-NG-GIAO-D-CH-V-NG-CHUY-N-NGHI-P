@@ -94,7 +94,7 @@ export async function getGoldChartData(timeframe: string, bypassRateLimit = fals
     throw new Error("Rate limit exceeded. Vui lòng đợi.");
   }
 
-  // Exclusively fetch from Yahoo Finance Gold Futures (GC=F) - completely keyless, 100% reliable, real-time
+  // Exclusively fetch from Yahoo Finance Gold Spot (XAUUSD=X) - completely keyless, 100% reliable, real-time
   return getYahooFinanceGoldFallback(timeframe, cacheKey, currentCandleOpen);
 }
 
@@ -117,7 +117,7 @@ const YAHOO_INTERVALS: Record<string, { interval: string; range: string }> = {
 
 async function getYahooFinanceGoldFallback(timeframe: string, cacheKey: string, currentCandleOpen: number): Promise<GoldChartResult> {
   const mapping = YAHOO_INTERVALS[timeframe] || { interval: "1d", range: "1y" };
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=${mapping.interval}&range=${mapping.range}`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=${mapping.interval}&range=${mapping.range}`;
   
   try {
     const resp = await fetch(url, {
@@ -232,7 +232,7 @@ async function fetchBaseGoldRealtime(): Promise<TradingViewRealtime> {
   let atr = 3.5;
 
   try {
-    const url = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d";
+    const url = "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=1m&range=1d";
     const resp = await fetch(url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -270,7 +270,7 @@ async function fetchBaseGoldRealtime(): Promise<TradingViewRealtime> {
         const prevClose = result?.meta?.previousClose || latestPrice;
         change = Number((((price - prevClose) / prevClose) * 100).toFixed(3));
         
-        console.log(`[Yahoo Real-time Price Engine] Fetched latest GC=F price: ${price} USD (change: ${change}%)`);
+        console.log(`[Yahoo Real-time Price Engine] Fetched latest XAUUSD=X price: ${price} USD (change: ${change}%)`);
       }
     }
   } catch (err: any) {
