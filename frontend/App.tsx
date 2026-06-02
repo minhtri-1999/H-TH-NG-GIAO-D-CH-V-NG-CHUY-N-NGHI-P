@@ -374,6 +374,29 @@ export default function App() {
     localStorage.setItem("ai_analysis_triggered", String(aiTriggered));
   }, [aiTriggered]);
 
+  // Defensive Self-Healing Hook: Resets stale out-of-bounds trades from old bugged system
+  useEffect(() => {
+    if (!data?.lastPrice || Object.keys(aiActiveTrades).length === 0) return;
+    const realBase = data.lastPrice;
+    let hasStale = false;
+    const updated = { ...aiActiveTrades };
+
+    for (const tf of Object.keys(updated)) {
+      const t = updated[tf];
+      if (t && (t.status === "PENDING" || t.status === "ACTIVE")) {
+        if (Math.abs(t.entry - realBase) > 15.0) {
+          console.warn(`[Self-Healing] Clearing stale trade on timeframe ${tf} at price ${t.entry} (current real gold is ${realBase})`);
+          delete updated[tf];
+          hasStale = true;
+        }
+      }
+    }
+
+    if (hasStale) {
+      setAiActiveTrades(updated);
+    }
+  }, [data, timeframe]);
+
   // Open-Source EMA States (TradingView Style)
   const [showEma50, setShowEma50] = useState<boolean>(true);
   const [showEma200, setShowEma200] = useState<boolean>(true);
