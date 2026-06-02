@@ -1564,7 +1564,7 @@ export default function App() {
 
     // Check if we need to synchronize with active A.I LIMIT order
     const activeAiTrade = aiActiveTrades[timeframe];
-    if (aiTriggered && activeAiTrade && (activeAiTrade.status === "PENDING" || activeAiTrade.status === "ACTIVE")) {
+    if (activeAiTrade && (activeAiTrade.status === "PENDING" || activeAiTrade.status === "ACTIVE")) {
       const isBuy = activeAiTrade.position === "BUY";
       const type = isBuy ? "BUY" : "SELL";
       const sl = activeAiTrade.stopLoss;
@@ -2245,7 +2245,7 @@ export default function App() {
                 />
               </div>
             )}
-            {!aiTriggered ? (
+            {!(aiActiveTrades[timeframe] && (aiActiveTrades[timeframe].status === "PENDING" || aiActiveTrades[timeframe].status === "ACTIVE")) ? (
               <div className="sug-card" style={{
                 borderTop: "3px solid rgba(255, 171, 0, 0.3)",
                 background: "rgba(20, 24, 33, 0.45)",
