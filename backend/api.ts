@@ -121,7 +121,7 @@ const YAHOO_INTERVALS: Record<string, { interval: string; range: string }> = {
 
 async function getYahooFinanceGoldFallback(timeframe: string, cacheKey: string, currentCandleOpen: number): Promise<GoldChartResult> {
   const mapping = YAHOO_INTERVALS[timeframe] || { interval: "1d", range: "1y" };
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=${mapping.interval}&range=${mapping.range}`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=${mapping.interval}&range=${mapping.range}`;
   
   try {
     const resp = await fetch(url, {
@@ -272,7 +272,7 @@ async function fetchBaseGoldRealtime(): Promise<TradingViewRealtime> {
 
   // TIER 1: Try Yahoo Finance
   try {
-    const url = "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=1m&range=1d";
+    const url = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d";
     const resp = await fetch(url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

@@ -731,84 +731,101 @@ export default function App() {
     const atr = data?.signals?.indicators?.atr || 3.2;
 
     let position: "BUY" | "SELL" = "BUY";
+    if (data?.signals?.type === "SELL" || data?.signals?.type === "STRONG_SELL") {
+      position = "SELL";
+    } else if (data?.signals?.type === "BUY" || data?.signals?.type === "STRONG_BUY") {
+      position = "BUY";
+    } else {
+      position = Math.random() > 0.5 ? "BUY" : "SELL";
+    }
+
+    const swings = data?.advancedAnalysis?.swings || [];
+    const sweeps = data?.advancedAnalysis?.sweeps || [];
+    const orderBlocks = data?.advancedAnalysis?.orderBlocks || [];
+
     let entry = 0;
     let stopLoss = 0;
     let takeProfit1 = 0;
     let takeProfit2 = 0;
-    let entryReason = "";
-    let slReason = "";
-    let tpReason = "";
 
-    const sug = data?.signals?.suggestion;
-    if (sug && sug.position !== "NEUTRAL" && sug.entry > 0) {
-      position = sug.position as "BUY" | "SELL";
-      entry = sug.entry;
-      stopLoss = sug.stopLoss;
-      takeProfit1 = sug.takeProfit1;
-      takeProfit2 = sug.takeProfit2;
-      entryReason = sug.entryReason || "";
-      slReason = sug.slReason || "";
-      tpReason = sug.tpReason || "";
-    } else {
-      // Fallback matching backend rules exactly
-      if (data?.signals?.type === "SELL" || data?.signals?.type === "STRONG_SELL") {
-        position = "SELL";
-      } else if (data?.signals?.type === "BUY" || data?.signals?.type === "STRONG_BUY") {
-        position = "BUY";
-      } else {
-        position = Math.random() > 0.5 ? "BUY" : "SELL";
-      }
+    let slDistance = 1.5 * atr;
+    let tp1Distance = 3.5 * atr;
+    let tp2Distance = 7.0 * atr;
 
-      let slDistance = 1.5 * atr;
-      let tp1Distance = 2.5 * atr;
-      let tp2Distance = 5.0 * atr;
-
-      if (timeframe === "1") {
-        slDistance = 3.5;
-        tp1Distance = 5.0;
-        tp2Distance = 12.0;
-      } else if (timeframe === "5") {
-        slDistance = 7.0;
-        tp1Distance = 10.0;
-        tp2Distance = 20.0;
-      } else if (timeframe === "15") {
-        slDistance = 10.0;
-        tp1Distance = 15.0;
-        tp2Distance = 35.0;
-      } else if (timeframe === "60") {
-        slDistance = 40.0;
-        tp1Distance = 80.0;
-        tp2Distance = 180.0;
-      } else if (timeframe === "1D") {
-        slDistance = 150.0;
-        tp1Distance = 350.0;
-        tp2Distance = 800.0;
-      }
-
-      if (position === "BUY") {
-        entry = currentPrice - 0.15 * atr;
-        stopLoss = entry - slDistance;
-        takeProfit1 = entry + tp1Distance;
-        takeProfit2 = entry + tp2Distance;
-      } else {
-        entry = currentPrice + 0.15 * atr;
-        stopLoss = entry + slDistance;
-        takeProfit1 = entry - tp1Distance;
-        takeProfit2 = entry - tp2Distance;
-      }
-
-      entry = Math.round(entry * 100) / 100;
-      stopLoss = Math.round(stopLoss * 100) / 100;
-      takeProfit1 = Math.round(takeProfit1 * 100) / 100;
-      takeProfit2 = Math.round(takeProfit2 * 100) / 100;
-
-      const rrRatioFallback = (Math.abs(takeProfit2 - entry) / Math.max(0.01, Math.abs(entry - stopLoss))).toFixed(1);
-      entryReason = `Lệnh ${position} LIMIT được đề xuất ở mức giá $${entry.toFixed(2)} dựa trên phân tích cấu trúc thị trường SMC và mức biến động ATR của khung ${timeframe === "1" ? "M1" : timeframe === "5" ? "M5" : timeframe === "15" ? "M15" : timeframe === "60" ? "H1" : "D1"}.`;
-      slReason = `Điểm dừng lỗ (SL) đặt tại $${stopLoss.toFixed(2)} để bảo toàn vốn trước các pha Stop Hunt.`;
-      tpReason = `Chốt lời TP1 tại $${takeProfit1.toFixed(2)} và TP2 tại $${takeProfit2.toFixed(2)} với tỷ lệ R:R mong đợi là 1:${rrRatioFallback}.`;
+    if (timeframe === "1") {
+      slDistance = 2.0;
+      tp1Distance = 6.0;
+      tp2Distance = 15.0;
+    } else if (timeframe === "5") {
+      slDistance = 4.0;
+      tp1Distance = 12.0;
+      tp2Distance = 25.0;
+    } else if (timeframe === "15") {
+      slDistance = 6.0;
+      tp1Distance = 18.0;
+      tp2Distance = 40.0;
+    } else if (timeframe === "60") {
+      slDistance = 25.0;
+      tp1Distance = 90.0;
+      tp2Distance = 200.0;
+    } else if (timeframe === "1D") {
+      slDistance = 100.0;
+      tp1Distance = 400.0;
+      tp2Distance = 900.0;
     }
 
+    if (position === "BUY") {
+      entry = currentPrice - 0.2 * atr;
+      
+      const sslSweep = sweeps.find(s => s.type === "SSL");
+      const lowestSwingLow = swings.filter(s => s.type === "LOW").reduce((min, s) => s.price < min ? s.price : min, currentPrice);
+      const lowestOB = orderBlocks.filter(o => o.type === "BULLISH").reduce((min, o) => o.low < min ? o.low : min, currentPrice);
+
+      let protectedLevel = Math.min(lowestSwingLow, lowestOB);
+      if (sslSweep && sslSweep.price < protectedLevel) {
+        protectedLevel = sslSweep.price;
+      }
+
+      if (protectedLevel > 0 && protectedLevel < entry && (entry - protectedLevel) < slDistance * 2.5) {
+        stopLoss = protectedLevel - 1.0;
+      } else {
+        stopLoss = entry - slDistance;
+      }
+
+      takeProfit1 = entry + tp1Distance;
+      takeProfit2 = entry + tp2Distance;
+    } else {
+      entry = currentPrice + 0.2 * atr;
+
+      const bslSweep = sweeps.find(s => s.type === "BSL");
+      const highestSwingHigh = swings.filter(s => s.type === "HIGH").reduce((max, s) => s.price > max ? s.price : max, currentPrice);
+      const highestOB = orderBlocks.filter(o => o.type === "BEARISH").reduce((max, o) => o.high > max ? o.high : max, currentPrice);
+
+      let protectedLevel = Math.max(highestSwingHigh, highestOB);
+      if (bslSweep && bslSweep.price > protectedLevel) {
+        protectedLevel = bslSweep.price;
+      }
+
+      if (protectedLevel > 0 && protectedLevel > entry && (protectedLevel - entry) < slDistance * 2.5) {
+        stopLoss = protectedLevel + 1.0;
+      } else {
+        stopLoss = entry + slDistance;
+      }
+
+      takeProfit1 = entry - tp1Distance;
+      takeProfit2 = entry - tp2Distance;
+    }
+
+    entry = Math.round(entry * 100) / 100;
+    stopLoss = Math.round(stopLoss * 100) / 100;
+    takeProfit1 = Math.round(takeProfit1 * 100) / 100;
+    takeProfit2 = Math.round(takeProfit2 * 100) / 100;
+
     const rrRatio = (Math.abs(takeProfit2 - entry) / Math.max(0.01, Math.abs(entry - stopLoss))).toFixed(1);
+
+    const entryReason = `Lệnh ${position} LIMIT được đề xuất ở mức giá $${entry.toFixed(2)} dựa trên phân tích cấu trúc thị trường SMC và mức biến động ATR của khung ${timeframe === "1" ? "M1" : timeframe === "5" ? "M5" : timeframe === "15" ? "M15" : timeframe === "60" ? "H1" : "D1"}.`;
+    const slReason = `Điểm dừng lỗ (SL) đặt tại $${stopLoss.toFixed(2)} bên ngoài các vùng quét thanh khoản (Anti-Stop Hunt) để tránh bẫy dừng lỗ của nhà cái.`;
+    const tpReason = `Chốt lời TP1 tại $${takeProfit1.toFixed(2)} và TP2 tại $${takeProfit2.toFixed(2)} với tỷ lệ R:R mong đợi là 1:${rrRatio} (TP dài, SL ngắn).`;
 
     const newTrade = {
       timeframe,
@@ -824,7 +841,6 @@ export default function App() {
       openPrice: 0,
       openTime: "",
       rrRatio,
-      outcome: Math.random() < 0.85 ? "TP" : "SL",
       entryReason,
       slReason,
       tpReason
@@ -1518,32 +1534,14 @@ export default function App() {
         } else if (activeAiTrade.status === "ACTIVE") {
           const isBuy = activeAiTrade.position === "BUY";
           
-          // 4.1. Check if price touches TP1 to secure partial profits and move SL to Entry (Break Even)
-          if (!activeAiTrade.hitTp1) {
-            const hitTP1 = isBuy ? (nextPrice >= activeAiTrade.takeProfit1) : (nextPrice <= activeAiTrade.takeProfit1);
-            if (hitTP1) {
-              setAiActiveTrades(prev => {
-                const updated = { ...prev };
-                if (updated[timeframe] && updated[timeframe].status === "ACTIVE") {
-                  updated[timeframe] = {
-                    ...updated[timeframe],
-                    hitTp1: true,
-                    stopLoss: activeAiTrade.entry, // Move SL to Entry (Break Even)
-                  };
-                }
-                return updated;
-              });
-              playSound("buy");
-            }
-          }
-
-          // 4.2. Check if price touches TP2 or the current Stop Loss (which may be at Entry after TP1 is hit)
-          const currentSL = activeAiTrade.hitTp1 ? activeAiTrade.entry : activeAiTrade.stopLoss;
+          const hitTP1 = isBuy ? (nextPrice >= activeAiTrade.takeProfit1) : (nextPrice <= activeAiTrade.takeProfit1);
           const hitTP2 = isBuy ? (nextPrice >= activeAiTrade.takeProfit2) : (nextPrice <= activeAiTrade.takeProfit2);
-          const hitSL = isBuy ? (nextPrice <= currentSL) : (nextPrice >= currentSL);
+          const hitSL = isBuy ? (nextPrice <= activeAiTrade.stopLoss) : (nextPrice >= activeAiTrade.stopLoss);
 
-          if (hitTP2 || hitSL) {
-            const finalStatus = hitTP2 ? "TP" : "SL";
+          if (hitTP1 || hitTP2 || hitSL) {
+            const finalStatus = (hitTP1 || hitTP2) ? "TP" : "SL";
+            const outcomeStatus = hitTP2 ? "TP2" : (hitTP1 ? "TP1" : "SL");
+
             let finalPips = 0;
             if (isBuy) {
               finalPips = Math.round((nextPrice - activeAiTrade.entry) * 10);
@@ -1583,7 +1581,7 @@ export default function App() {
               stopLoss: activeAiTrade.stopLoss,
               takeProfit1: activeAiTrade.takeProfit1,
               takeProfit2: activeAiTrade.takeProfit2,
-              status: finalStatus === "TP" ? "TP2" : (activeAiTrade.hitTp1 ? "TP1" : "SL"),
+              status: outcomeStatus,
               openTime: Date.now() - 30000,
               closeTime: Date.now(),
               pips: finalPips,
@@ -2688,7 +2686,7 @@ export default function App() {
                         ))}
 
                         {/* Shaded Risk/Reward Rectangles */}
-                        {unifiedSignal && (() => {
+                        {unifiedSignal && (aiActiveTrades[timeframe] && (aiActiveTrades[timeframe].status === "PENDING" || aiActiveTrades[timeframe].status === "ACTIVE")) && (() => {
                           const yEntry = chartSpecs.getY(unifiedSignal.entryMid);
                           const ySL = chartSpecs.getY(unifiedSignal.sl);
                           const yTP2 = chartSpecs.getY(unifiedSignal.tp2);
@@ -3067,7 +3065,7 @@ export default function App() {
                         })()}
 
                         {/* SMC Horizontal Lines & Price Tags */}
-                        {unifiedSignal && (() => {
+                        {unifiedSignal && (aiActiveTrades[timeframe] && (aiActiveTrades[timeframe].status === "PENDING" || aiActiveTrades[timeframe].status === "ACTIVE")) && (() => {
                           const yEntry = chartSpecs.getY(unifiedSignal.entryMid);
                           const ySL = chartSpecs.getY(unifiedSignal.sl);
                           const yTP1 = chartSpecs.getY(unifiedSignal.tp1);
