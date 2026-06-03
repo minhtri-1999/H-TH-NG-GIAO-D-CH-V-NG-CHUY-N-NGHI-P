@@ -10,6 +10,7 @@ let inMemoryTrades: ClosedTrade[] = [];
 let lastSeedTime = 0;
 
 // Deterministic Backtest Engine: Runs strategy on actual historical candles
+// Deterministic Backtest Engine: Runs strategy on actual historical candles
 export function backtestTimeframe(timeframe: string, candles: Candle[]): ClosedTrade[] {
   const closedTrades: ClosedTrade[] = [];
   const multiplier = 100; // Gold point contract size ($100 per pip per lot)
@@ -20,7 +21,16 @@ export function backtestTimeframe(timeframe: string, candles: Candle[]): ClosedT
   else if (timeframe === "H1") lotSize = 1.0;
   else if (timeframe === "D1") lotSize = 2.0;
 
-  let openTrade: {
+  let pendingOrder: {
+    position: "BUY" | "SELL";
+    entry: number;
+    stopLoss: number;
+    takeProfit1: number;
+    takeProfit2: number;
+    signalTime: number;
+  } | null = null;
+
+  let activeTrade: {
     position: "BUY" | "SELL";
     entry: number;
     stopLoss: number;
@@ -33,30 +43,49 @@ export function backtestTimeframe(timeframe: string, candles: Candle[]): ClosedT
   for (let i = 49; i < candles.length; i++) {
     const currentCandle = candles[i];
 
-    if (openTrade) {
-      // Check if the current candle closes the open trade
+    // 1. Check if pending order gets activated in the current candle
+    if (pendingOrder && !activeTrade) {
+      const isBuy = pendingOrder.position === "BUY";
+      // To activate, the candle's price range (low to high) must touch or cross the entry price
+      const hitEntry = currentCandle.low <= pendingOrder.entry && currentCandle.high >= pendingOrder.entry;
+
+      if (hitEntry) {
+        activeTrade = {
+          position: pendingOrder.position,
+          entry: pendingOrder.entry,
+          stopLoss: pendingOrder.stopLoss,
+          takeProfit1: pendingOrder.takeProfit1,
+          takeProfit2: pendingOrder.takeProfit2,
+          openTime: currentCandle.time * 1000,
+        };
+        pendingOrder = null; // Filled
+      }
+    }
+
+    // 2. Check if the active trade is closed (TP or SL) in the current candle
+    if (activeTrade) {
       let closed = false;
       let status: "TP1" | "TP2" | "SL" = "SL";
 
-      if (openTrade.position === "BUY") {
-        if (currentCandle.low <= openTrade.stopLoss) {
+      if (activeTrade.position === "BUY") {
+        if (currentCandle.low <= activeTrade.stopLoss) {
           closed = true;
           status = "SL";
-        } else if (currentCandle.high >= openTrade.takeProfit2) {
+        } else if (currentCandle.high >= activeTrade.takeProfit2) {
           closed = true;
           status = "TP2";
-        } else if (currentCandle.high >= openTrade.takeProfit1) {
+        } else if (currentCandle.high >= activeTrade.takeProfit1) {
           closed = true;
           status = "TP1";
         }
       } else { // SELL
-        if (currentCandle.high >= openTrade.stopLoss) {
+        if (currentCandle.high >= activeTrade.stopLoss) {
           closed = true;
           status = "SL";
-        } else if (currentCandle.low <= openTrade.takeProfit2) {
+        } else if (currentCandle.low <= activeTrade.takeProfit2) {
           closed = true;
           status = "TP2";
-        } else if (currentCandle.low <= openTrade.takeProfit1) {
+        } else if (currentCandle.low <= activeTrade.takeProfit1) {
           closed = true;
           status = "TP1";
         }
@@ -64,51 +93,54 @@ export function backtestTimeframe(timeframe: string, candles: Candle[]): ClosedT
 
       if (closed) {
         let pips = 0;
-        if (openTrade.position === "BUY") {
-          if (status === "TP2") pips = Number(((openTrade.takeProfit2 - openTrade.entry) * 10).toFixed(1));
-          else if (status === "TP1") pips = Number(((openTrade.takeProfit1 - openTrade.entry) * 10).toFixed(1));
-          else pips = Number(((openTrade.stopLoss - openTrade.entry) * 10).toFixed(1));
+        if (activeTrade.position === "BUY") {
+          if (status === "TP2") pips = Number(((activeTrade.takeProfit2 - activeTrade.entry) * 10).toFixed(1));
+          else if (status === "TP1") pips = Number(((activeTrade.takeProfit1 - activeTrade.entry) * 10).toFixed(1));
+          else pips = Number(((activeTrade.stopLoss - activeTrade.entry) * 10).toFixed(1));
         } else { // SELL
-          if (status === "TP2") pips = Number(((openTrade.entry - openTrade.takeProfit2) * 10).toFixed(1));
-          else if (status === "TP1") pips = Number(((openTrade.entry - openTrade.takeProfit1) * 10).toFixed(1));
-          else pips = Number(((openTrade.entry - openTrade.stopLoss) * 10).toFixed(1));
+          if (status === "TP2") pips = Number(((activeTrade.entry - activeTrade.takeProfit2) * 10).toFixed(1));
+          else if (status === "TP1") pips = Number(((activeTrade.entry - activeTrade.takeProfit1) * 10).toFixed(1));
+          else pips = Number(((activeTrade.entry - activeTrade.stopLoss) * 10).toFixed(1));
         }
 
         const profitUsd = Number((pips * multiplier * lotSize / 10).toFixed(2));
         const closeTime = currentCandle.time * 1000;
 
         closedTrades.push({
-          id: `${timeframe}-${openTrade.openTime}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+          id: `${timeframe}-${activeTrade.openTime}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
           timeframe,
-          position: openTrade.position,
-          entry: openTrade.entry,
-          stopLoss: openTrade.stopLoss,
-          takeProfit1: openTrade.takeProfit1,
-          takeProfit2: openTrade.takeProfit2,
+          position: activeTrade.position,
+          entry: activeTrade.entry,
+          stopLoss: activeTrade.stopLoss,
+          takeProfit1: activeTrade.takeProfit1,
+          takeProfit2: activeTrade.takeProfit2,
           status,
-          openTime: openTrade.openTime,
+          openTime: activeTrade.openTime,
           closeTime,
           pips,
           profitUsd,
         });
 
-        openTrade = null;
+        activeTrade = null;
       }
-    } else {
-      // Evaluate signals at the close of candle i
+    }
+
+    // 3. If no active trade and no pending order, check if a new signal is generated
+    // If we have an existing pending order, a new signal will cancel/replace it with the fresh suggestion
+    if (!activeTrade) {
       const subCandles = candles.slice(0, i + 1);
       const signal = analyzeSignals(subCandles);
 
       if (signal.type === "BUY" || signal.type === "SELL") {
         const sug = signal.suggestion;
         if (sug.entry > 0 && sug.stopLoss > 0 && sug.takeProfit1 > 0) {
-          openTrade = {
+          pendingOrder = {
             position: signal.type,
             entry: sug.entry,
             stopLoss: sug.stopLoss,
             takeProfit1: sug.takeProfit1,
             takeProfit2: sug.takeProfit2,
-            openTime: currentCandle.time * 1000,
+            signalTime: currentCandle.time * 1000,
           };
         }
       }

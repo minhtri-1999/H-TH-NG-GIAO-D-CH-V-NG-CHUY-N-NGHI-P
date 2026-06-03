@@ -119,6 +119,77 @@ const YAHOO_INTERVALS: Record<string, { interval: string; range: string }> = {
   "MN1": { interval: "1mo", range: "10y" },
 };
 
+const BINANCE_INTERVALS: Record<string, string> = {
+  "1": "1m",
+  "M1": "1m",
+  "5": "5m",
+  "M5": "5m",
+  "15": "15m",
+  "M15": "15m",
+  "60": "1h",
+  "H1": "1h",
+  "1D": "1d",
+  "D1": "1d",
+  "1W": "1w",
+  "W1": "1w",
+  "1M": "1M",
+  "MN1": "1M",
+};
+
+const BINANCE_LIMITS: Record<string, number> = {
+  "1": 500,
+  "M1": 500,
+  "5": 500,
+  "M5": 500,
+  "15": 300,
+  "M15": 300,
+  "60": 300,
+  "H1": 300,
+  "1D": 365,
+  "D1": 365,
+};
+
+async function getBinanceGoldFallback(timeframe: string): Promise<GoldChartResult> {
+  const interval = BINANCE_INTERVALS[timeframe] || "1d";
+  const limit = BINANCE_LIMITS[timeframe] || 300;
+  const url = `https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=${interval}&limit=${limit}`;
+
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    throw new Error(`Binance HTTP ${resp.status}: ${await resp.text()}`);
+  }
+
+  const raw = await resp.json();
+  if (!Array.isArray(raw) || raw.length === 0) {
+    throw new Error("Empty data from Binance PAXGUSDT");
+  }
+
+  const clean: GoldChartResult = { timestamp: [], open: [], high: [], low: [], close: [], volume: [] };
+  for (const item of raw) {
+    const t = Math.floor(Number(item[0]) / 1000);
+    const o = adjustGoldPrice(parseFloat(item[1]));
+    const h = adjustGoldPrice(parseFloat(item[2]));
+    const l = adjustGoldPrice(parseFloat(item[3]));
+    const c = adjustGoldPrice(parseFloat(item[4]));
+    const v = parseFloat(item[5]);
+
+    if (t && !isNaN(o) && !isNaN(h) && !isNaN(l) && !isNaN(c)) {
+      clean.timestamp.push(t);
+      clean.open.push(o);
+      clean.high.push(h);
+      clean.low.push(l);
+      clean.close.push(c);
+      clean.volume.push(v);
+    }
+  }
+
+  if (clean.timestamp.length === 0) {
+    throw new Error("No valid candles from Binance PAXGUSDT after cleaning");
+  }
+
+  return clean;
+}
+
 async function getYahooFinanceGoldFallback(timeframe: string, cacheKey: string, currentCandleOpen: number): Promise<GoldChartResult> {
   const mapping = YAHOO_INTERVALS[timeframe] || { interval: "1d", range: "1y" };
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=${mapping.interval}&range=${mapping.range}`;
@@ -186,35 +257,49 @@ async function getYahooFinanceGoldFallback(timeframe: string, cacheKey: string, 
     setCache(cacheKey, clean, ttl);
     return clean;
   } catch (err: any) {
-    console.warn(`[Yahoo Fallback Cloud Engine] Failed to fetch. Generating dynamic mock candles to prevent server crash:`, err.message);
-    
-    // Tạo 150 cây nến giả lập mượt mà quanh vùng giá 4490.00
-    const clean: GoldChartResult = { timestamp: [], open: [], high: [], low: [], close: [], volume: [] };
-    const candleCount = 150;
-    const intervalSec = getIntervalInSeconds(timeframe);
-    let currentPrice = 4490.00;
-    
-    for (let i = candleCount; i >= 0; i--) {
-      const t = currentCandleOpen - i * intervalSec;
-      const change = (Math.random() - 0.5) * 3.5;
-      const open = Math.round(currentPrice * 100) / 100;
-      const close = Math.round((currentPrice + change) * 100) / 100;
-      const high = Math.round((Math.max(open, close) + Math.random() * 2.0) * 100) / 100;
-      const low = Math.round((Math.min(open, close) - Math.random() * 2.0) * 100) / 100;
-      const volume = Math.round(Math.random() * 5000 + 1000);
+    console.warn(`[Yahoo Fallback Cloud Engine] Failed to fetch: ${err.message}. Trying Binance PAXGUSDT fallback...`);
+    try {
+      const binanceClean = await getBinanceGoldFallback(timeframe);
+      console.log(`[Binance Fallback Success] Successfully loaded ${binanceClean.timestamp.length} real gold candles from Binance.`);
       
-      clean.timestamp.push(t);
-      clean.open.push(open);
-      clean.high.push(high);
-      clean.low.push(low);
-      clean.close.push(close);
-      clean.volume.push(volume);
+      const lastClosePrice = binanceClean.close[binanceClean.close.length - 1];
+      if (lastClosePrice && lastClosePrice > 0) {
+        lastKnownGoldPrice = lastClosePrice;
+      }
       
-      currentPrice = close;
+      setCache(cacheKey, binanceClean, ["1", "5"].includes(timeframe) ? 10000 : 60000);
+      return binanceClean;
+    } catch (binanceErr: any) {
+      console.warn(`[Binance Fallback Failed] ${binanceErr.message}. Generating dynamic mock candles to prevent server crash.`);
+      
+      // Tạo 150 cây nến giả lập mượt mà quanh vùng giá lastKnownGoldPrice
+      const clean: GoldChartResult = { timestamp: [], open: [], high: [], low: [], close: [], volume: [] };
+      const candleCount = 150;
+      const intervalSec = getIntervalInSeconds(timeframe);
+      let currentPrice = lastKnownGoldPrice;
+      
+      for (let i = candleCount; i >= 0; i--) {
+        const t = currentCandleOpen - i * intervalSec;
+        const change = (Math.random() - 0.5) * 3.5;
+        const open = Math.round(currentPrice * 100) / 100;
+        const close = Math.round((currentPrice + change) * 100) / 100;
+        const high = Math.round((Math.max(open, close) + Math.random() * 2.0) * 100) / 100;
+        const low = Math.round((Math.min(open, close) - Math.random() * 2.0) * 100) / 100;
+        const volume = Math.round(Math.random() * 5000 + 1000);
+        
+        clean.timestamp.push(t);
+        clean.open.push(open);
+        clean.high.push(high);
+        clean.low.push(low);
+        clean.close.push(close);
+        clean.volume.push(volume);
+        
+        currentPrice = close;
+      }
+      
+      setCache(cacheKey, clean, 10000); // 10s TTL
+      return clean;
     }
-    
-    setCache(cacheKey, clean, 10000); // 10s TTL
-    return clean;
   }
 }
 
