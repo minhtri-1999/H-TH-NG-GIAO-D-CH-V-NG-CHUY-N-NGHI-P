@@ -307,6 +307,12 @@ export default function App() {
         const d = await resp.json();
         if (d.success && d.trades) {
           setClosedTrades(d.trades);
+          // Clear active AI trades and reset analysis states to clean emulators
+          setAiActiveTrades({});
+          setAiTriggered(false);
+          setSimulatedTrades([]);
+          localStorage.removeItem("ai_active_trades");
+          localStorage.removeItem("ai_analysis_triggered");
         }
       } else {
         alert("Lỗi khi đồng bộ lại dữ liệu nến.");
@@ -1423,6 +1429,8 @@ export default function App() {
   // High Frequency Millisecond Tick Loop
   useEffect(() => {
     if (!tickerActive || !data || !user) return;
+
+    const activeAiTrade = aiActiveTrades[timeframe];
 
     const tickInterval = setInterval(() => {
       // 1. Random Walk price simulation around real market price (+/- 0.05 to 0.15 Gold USD)
