@@ -3791,6 +3791,28 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                           </p>
                         </div>
                       </div>
+                      <button
+                        onClick={handleResetBacktest}
+                        style={{
+                          background: "rgba(255, 215, 0, 0.08)",
+                          border: "1px solid var(--gold)",
+                          color: "var(--gold)",
+                          padding: "6px 14px",
+                          borderRadius: "6px",
+                          fontSize: "11px",
+                          fontWeight: "bold",
+                          cursor: "pointer",
+                          transition: "all 0.2s"
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.background = "rgba(255, 215, 0, 0.15)";
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.background = "rgba(255, 215, 0, 0.08)";
+                        }}
+                      >
+                        🔄 ĐỒNG BỘ LẠI / RESET LỊCH SỬ
+                      </button>
                     </div>
 
                     {/* Filter Panel (Timeframe & Day Filter Sub-tabs) */}
