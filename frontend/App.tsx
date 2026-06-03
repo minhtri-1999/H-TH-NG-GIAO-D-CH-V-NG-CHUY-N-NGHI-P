@@ -303,19 +303,20 @@ export default function App() {
   const handleResetBacktest = async () => {
     try {
       const resp = await fetch("/api/backtest/reset", { method: "POST" });
-      if (resp.ok) {
-        const d = await resp.json();
-        if (d.success && d.trades) {
+      const d = await resp.json().catch(() => ({}));
+      if (resp.ok && d.success) {
+        if (d.trades) {
           setClosedTrades(d.trades);
-          // Clear active AI trades and reset analysis states to clean emulators
-          setAiActiveTrades({});
-          setAiTriggered(false);
-          setSimulatedTrades([]);
-          localStorage.removeItem("ai_active_trades");
-          localStorage.removeItem("ai_analysis_triggered");
         }
+        // Clear active AI trades and reset analysis states to clean emulators
+        setAiActiveTrades({});
+        setAiTriggered(false);
+        setSimulatedTrades([]);
+        localStorage.removeItem("ai_active_trades");
+        localStorage.removeItem("ai_analysis_triggered");
+        alert("Đồng bộ dữ liệu nến và chạy lại backtest thực tế thành công!");
       } else {
-        alert("Lỗi khi đồng bộ lại dữ liệu nến.");
+        alert("Lỗi khi đồng bộ lại dữ liệu nến: " + (d.error || resp.statusText || "Phản hồi không hợp lệ từ máy chủ."));
       }
     } catch (err: any) {
       alert("Lỗi hệ thống: " + err.message);

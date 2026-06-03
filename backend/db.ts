@@ -194,23 +194,53 @@ export interface ClosedTrade {
 }
 
 export async function saveClosedTrade(trade: ClosedTrade): Promise<void> {
-  await kv.set(["closed_trades", trade.timeframe.toUpperCase(), trade.id], trade);
+  const timeframe = trade.timeframe.toUpperCase();
+  const res = await kv.get<ClosedTrade[]>(["closed_trades_v2", timeframe]);
+  const list = res.value || [];
+  const filtered = list.filter(t => t.id !== trade.id);
+  filtered.push(trade);
+  // Sort descending by close time and keep latest 200 trades per timeframe to stay within Deno KV limits
+  filtered.sort((a, b) => b.closeTime - a.closeTime);
+  const sliced = filtered.slice(0, 200);
+  await kv.set(["closed_trades_v2", timeframe], sliced);
+}
+
+export async function saveClosedTradesList(timeframe: string, trades: ClosedTrade[]): Promise<void> {
+  // Sort descending by close time and keep latest 200 trades
+  const sorted = [...trades].sort((a, b) => b.closeTime - a.closeTime);
+  const sliced = sorted.slice(0, 200);
+  await kv.set(["closed_trades_v2", timeframe.toUpperCase()], sliced);
 }
 
 export async function getClosedTrades(timeframe?: string): Promise<ClosedTrade[]> {
+  if (timeframe) {
+    const res = await kv.get<ClosedTrade[]>(["closed_trades_v2", timeframe.toUpperCase()]);
+    return (res.value || []).sort((a, b) => b.closeTime - a.closeTime);
+  }
   const list: ClosedTrade[] = [];
-  const prefix = timeframe ? ["closed_trades", timeframe.toUpperCase()] : ["closed_trades"];
-  const iter = kv.list<ClosedTrade>({ prefix });
+  const iter = kv.list<ClosedTrade[]>({ prefix: ["closed_trades_v2"] });
   for await (const res of iter) {
-    list.push(res.value);
+    if (Array.isArray(res.value)) {
+      list.push(...res.value);
+    }
   }
   // Sort descending by close time (newest closed trades first)
   return list.sort((a, b) => b.closeTime - a.closeTime);
 }
 
 export async function clearClosedTrades(): Promise<void> {
-  const iter = kv.list({ prefix: ["closed_trades"] });
+  const iter = kv.list({ prefix: ["closed_trades_v2"] });
   for await (const res of iter) {
     await kv.delete(res.key);
+  }
+  
+  // Clean up legacy v1 closed trades asynchronously to prevent blocking/timeouts
+  try {
+    const legacyIter = kv.list({ prefix: ["closed_trades"] });
+    for await (const res of legacyIter) {
+      await kv.delete(res.key);
+    }
+  } catch (err: any) {
+    console.warn("Failed to clean up legacy closed trades:", err.message);
   }
 }

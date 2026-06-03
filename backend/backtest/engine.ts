@@ -1,6 +1,6 @@
 import { Hono } from "npm:hono@4";
 import { getGoldRealtimePrice, getGoldChartData, lastKnownGoldPrice } from "../api.ts";
-import { type ClosedTrade, saveClosedTrade, getClosedTrades, clearClosedTrades } from "../db.ts";
+import { type ClosedTrade, saveClosedTrade, saveClosedTradesList, getClosedTrades, clearClosedTrades } from "../db.ts";
 import { analyzeSignals, type Candle } from "../signals.ts";
 
 export const backtestRouter = new Hono();
@@ -160,11 +160,9 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
         const tfLabel = tf === "1" ? "M1" : tf === "5" ? "M5" : tf === "15" ? "M15" : tf === "60" ? "H1" : "D1";
         const tfTrades = backtestTimeframe(tfLabel, candles);
         
-        // Save to Deno KV and collect
-        for (const t of tfTrades) {
-          await saveClosedTrade(t);
-          allGeneratedTrades.push(t);
-        }
+        // Save to Deno KV as a single batch list for this timeframe
+        await saveClosedTradesList(tfLabel, tfTrades);
+        allGeneratedTrades.push(...tfTrades);
       } catch (err: any) {
         console.error(`Failed to run backtest for timeframe ${tf}:`, err.message);
       }
