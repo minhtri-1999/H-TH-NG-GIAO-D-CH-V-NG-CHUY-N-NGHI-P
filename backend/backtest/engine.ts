@@ -1,6 +1,6 @@
 import { Hono } from "npm:hono@4";
 import { getGoldRealtimePrice, getGoldChartData, lastKnownGoldPrice } from "../api.ts";
-import { type ClosedTrade, saveClosedTrade, getClosedTrades } from "../db.ts";
+import { type ClosedTrade, saveClosedTrade, getClosedTrades, clearClosedTrades } from "../db.ts";
 import { analyzeSignals, type Candle } from "../signals.ts";
 
 export const backtestRouter = new Hono();
@@ -126,7 +126,7 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
     return inMemoryTrades;
   }
 
-  console.log("Fetching real closed trades from Deno KV and seeding realistic history...");
+  console.log("Loading trades from KV database...");
 
   let kvTrades: ClosedTrade[] = [];
   try {
@@ -135,169 +135,45 @@ export async function seedBacktestHistory(force = false): Promise<ClosedTrade[]>
     console.error("Failed to fetch closed trades from Deno KV:", err.message);
   }
 
-  // Dynamic seed trades anchored to REAL-TIME gold chart price via lastKnownGoldPrice
-  // This ensures the backtest history ALWAYS shows prices matching the actual TradingView chart
-  const baseTime = Date.now();
-  const basePrice = lastKnownGoldPrice; // Real-time price from Yahoo Finance or TradingView scanner
-  console.log(`[Backtest Seed] Anchoring seed trades to real-time price: $${basePrice}`);
+  // If forced reset, or if KV database is empty, generate genuine backtest trades from real candle history
+  if (force || kvTrades.length === 0) {
+    console.log("Generating actual backtest trades from real historical candles...");
+    try {
+      await clearClosedTrades();
+    } catch (_) {}
 
-  // Offset helper: given a relative delta from the reference price (~4520), compute real price
-  const ref = 4520.00; // The reference price the deltas below were designed around
-  const offset = Math.round((basePrice - ref) * 100) / 100;
-  const p = (delta: number) => Math.round((ref + delta + offset) * 100) / 100;
+    const timeframes = ["1", "5", "15", "60", "1D"];
+    const allGeneratedTrades: ClosedTrade[] = [];
 
-  const realisticSeeds: ClosedTrade[] = [
-    {
-      id: "M1-1780403880000-DRFW",
-      timeframe: "M1",
-      position: "SELL",
-      entry: p(1.84),
-      stopLoss: p(6.84),
-      takeProfit1: p(-3.16),
-      takeProfit2: p(-10.16),
-      status: "TP1",
-      openTime: baseTime - 60 * 60 * 1000,
-      closeTime: baseTime - 50 * 60 * 1000,
-      pips: 50,
-      profitUsd: 10.00
-    },
-    {
-      id: "M1-1780403760000-6KLR",
-      timeframe: "M1",
-      position: "BUY",
-      entry: p(-0.85),
-      stopLoss: p(-5.85),
-      takeProfit1: p(4.15),
-      takeProfit2: p(11.15),
-      status: "TP1",
-      openTime: baseTime - 120 * 60 * 1000,
-      closeTime: baseTime - 110 * 60 * 1000,
-      pips: 50,
-      profitUsd: 10.00
-    },
-    {
-      id: "M1-1780403460000-23DY",
-      timeframe: "M1",
-      position: "SELL",
-      entry: p(5.15),
-      stopLoss: p(10.15),
-      takeProfit1: p(0.15),
-      takeProfit2: p(-6.85),
-      status: "SL",
-      openTime: baseTime - 180 * 60 * 1000,
-      closeTime: baseTime - 170 * 60 * 1000,
-      pips: -50,
-      profitUsd: -10.00
-    },
-    {
-      id: "M5-1780403980000-AXDF",
-      timeframe: "M5",
-      position: "BUY",
-      entry: p(-4.50),
-      stopLoss: p(-9.50),
-      takeProfit1: p(0.50),
-      takeProfit2: p(8.50),
-      status: "TP2",
-      openTime: baseTime - 3 * 3600 * 1000,
-      closeTime: baseTime - 2 * 3600 * 1000,
-      pips: 130,
-      profitUsd: 52.00
-    },
-    {
-      id: "M5-1780403580000-BZRT",
-      timeframe: "M5",
-      position: "SELL",
-      entry: p(8.20),
-      stopLoss: p(13.20),
-      takeProfit1: p(3.20),
-      takeProfit2: p(-4.80),
-      status: "TP1",
-      openTime: baseTime - 4 * 3600 * 1000,
-      closeTime: baseTime - 3 * 3600 * 1000,
-      pips: 50,
-      profitUsd: 20.00
-    },
-    {
-      id: "M15-1780404100000-CXTY",
-      timeframe: "M15",
-      position: "BUY",
-      entry: p(-7.60),
-      stopLoss: p(-13.60),
-      takeProfit1: p(-1.60),
-      takeProfit2: p(9.40),
-      status: "TP2",
-      openTime: baseTime - 6 * 3600 * 1000,
-      closeTime: baseTime - 5 * 3600 * 1000,
-      pips: 170,
-      profitUsd: 85.00
-    },
-    {
-      id: "M15-1780403100000-PLKJ",
-      timeframe: "M15",
-      position: "SELL",
-      entry: p(4.60),
-      stopLoss: p(10.60),
-      takeProfit1: p(-1.40),
-      takeProfit2: p(-12.40),
-      status: "SL",
-      openTime: baseTime - 8 * 3600 * 1000,
-      closeTime: baseTime - 7 * 3600 * 1000,
-      pips: -60,
-      profitUsd: -30.00
-    },
-    {
-      id: "H1-1780404500000-DSWQ",
-      timeframe: "H1",
-      position: "BUY",
-      entry: p(-11.50),
-      stopLoss: p(-19.50),
-      takeProfit1: p(-1.50),
-      takeProfit2: p(12.50),
-      status: "TP2",
-      openTime: baseTime - 24 * 3600 * 1000,
-      closeTime: baseTime - 20 * 3600 * 1000,
-      pips: 240,
-      profitUsd: 240.00
-    },
-    {
-      id: "H1-1780403500000-MNBV",
-      timeframe: "H1",
-      position: "SELL",
-      entry: p(6.00),
-      stopLoss: p(14.00),
-      takeProfit1: p(-4.00),
-      takeProfit2: p(-18.00),
-      status: "TP1",
-      openTime: baseTime - 28 * 3600 * 1000,
-      closeTime: baseTime - 24 * 3600 * 1000,
-      pips: 100,
-      profitUsd: 100.00
-    },
-    {
-      id: "D1-1780405500000-QWER",
-      timeframe: "D1",
-      position: "BUY",
-      entry: p(-28.00),
-      stopLoss: p(-43.00),
-      takeProfit1: p(-8.00),
-      takeProfit2: p(18.00),
-      status: "TP2",
-      openTime: baseTime - 5 * 24 * 3600 * 1000,
-      closeTime: baseTime - 3 * 24 * 3600 * 1000,
-      pips: 460,
-      profitUsd: 920.00
+    for (const tf of timeframes) {
+      try {
+        const chartRaw = await getGoldChartData(tf, true); // bypass cache boundaries
+        const candles: Candle[] = chartRaw.timestamp.map((t, i) => ({
+          time: t,
+          open: chartRaw.open[i] ?? 0,
+          high: chartRaw.high[i] ?? 0,
+          low: chartRaw.low[i] ?? 0,
+          close: chartRaw.close[i] ?? 0,
+          volume: chartRaw.volume[i] ?? 0,
+        })).filter(c => c.open > 0 && c.close > 0);
+
+        const tfLabel = tf === "1" ? "M1" : tf === "5" ? "M5" : tf === "15" ? "M15" : tf === "60" ? "H1" : "D1";
+        const tfTrades = backtestTimeframe(tfLabel, candles);
+        
+        // Save to Deno KV and collect
+        for (const t of tfTrades) {
+          await saveClosedTrade(t);
+          allGeneratedTrades.push(t);
+        }
+      } catch (err: any) {
+        console.error(`Failed to run backtest for timeframe ${tf}:`, err.message);
+      }
     }
-  ];
 
-  // Merge Deno KV Trades with static realistic seeds (avoiding duplicates)
-  const merged = [...kvTrades];
-  for (const seed of realisticSeeds) {
-    if (!merged.some(t => t.id === seed.id)) {
-      merged.push(seed);
-    }
+    kvTrades = allGeneratedTrades;
   }
 
-  inMemoryTrades = merged.sort((a, b) => b.closeTime - a.closeTime);
+  inMemoryTrades = kvTrades.sort((a, b) => b.closeTime - a.closeTime);
   lastSeedTime = Date.now();
 
   // Save backtest reports physically in workspace for export/download support
