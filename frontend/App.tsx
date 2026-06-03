@@ -724,95 +724,85 @@ export default function App() {
     const currentPrice = realApiPrice;
     const atr = data?.signals?.indicators?.atr || 3.2;
 
-    // Choose BUY or SELL position based on real confluence signals
     let position: "BUY" | "SELL" = "BUY";
-    if (data?.signals?.type === "SELL" || data?.signals?.type === "STRONG_SELL") {
-      position = "SELL";
-    } else if (data?.signals?.type === "BUY" || data?.signals?.type === "STRONG_BUY") {
-      position = "BUY";
-    } else {
-      position = Math.random() > 0.5 ? "BUY" : "SELL";
-    }
-
-    // 1. Fetch real swing points from advanced analysis database to detect stop hunt sweep zones
-    const swings = data?.advancedAnalysis?.swings || [];
-    const swingLows = swings.filter(s => s.type === "LOW" && !s.broken);
-    const swingHighs = swings.filter(s => s.type === "HIGH" && !s.broken);
-
-    // Default structural extremes if swings list is empty
-    let baseSwingLow = currentPrice - 2.5 * atr;
-    let baseSwingHigh = currentPrice + 2.5 * atr;
-
-    if (swingLows.length > 0) {
-      baseSwingLow = swingLows[swingLows.length - 1].price;
-    }
-    if (swingHighs.length > 0) {
-      baseSwingHigh = swingHighs[swingHighs.length - 1].price;
-    }
-
     let entry = 0;
     let stopLoss = 0;
     let takeProfit1 = 0;
     let takeProfit2 = 0;
-
-    // 2. Institutional Stop Hunt Sweep Zone Algorithm (Highly Optimized relative to active current price)
-    // To guarantee that our livePrice simulation NEVER drifts away and creates any discrepancy with the TradingView chart,
-    // we anchor all calculations tightly around the active market currentPrice, utilizing a precise ATR spacing:
-    if (position === "BUY") {
-      // Entry is placed exactly at the retail Stop Hunt Sweep Zone (slightly below currentPrice)
-      entry = currentPrice - 0.18 * atr;
-      // Stop Loss is placed past the maximum sweep tail (extremely tight and safe)
-      stopLoss = entry - 0.36 * atr;
-      // TP1 targets intermediate resistance/support
-      takeProfit1 = entry + 0.45 * atr;
-      // TP2 targets the opposite structural swing extreme
-      takeProfit2 = entry + 0.90 * atr;
-    } else {
-      // Entry is placed slightly above currentPrice
-      entry = currentPrice + 0.18 * atr;
-      // Stop Loss is placed slightly above Entry
-      stopLoss = entry + 0.36 * atr;
-      // TP1 targets intermediate support
-      takeProfit1 = entry - 0.45 * atr;
-      // TP2 targets the opposite extreme
-      takeProfit2 = entry - 0.90 * atr;
-    }
-
-    // 3. Perfect mathematical clamping bounds to ensure immaculate coordinates
-    if (position === "BUY") {
-      if (entry >= currentPrice) entry = currentPrice - 0.15 * atr;
-      if (stopLoss >= entry) stopLoss = entry - 0.30 * atr;
-      if (takeProfit1 <= entry) takeProfit1 = entry + 0.40 * atr;
-      if (takeProfit2 <= takeProfit1) takeProfit2 = takeProfit1 + 0.50 * atr;
-    } else {
-      if (entry <= currentPrice) entry = currentPrice + 0.15 * atr;
-      if (stopLoss <= entry) stopLoss = entry + 0.30 * atr;
-      if (takeProfit1 >= entry) takeProfit1 = entry - 0.40 * atr;
-      if (takeProfit2 >= takeProfit1) takeProfit2 = takeProfit1 - 0.50 * atr;
-    }
-
-    // Round values to gold pip standards (2 decimals)
-    entry = Math.round(entry * 100) / 100;
-    stopLoss = Math.round(stopLoss * 100) / 100;
-    takeProfit1 = Math.round(takeProfit1 * 100) / 100;
-    takeProfit2 = Math.round(takeProfit2 * 100) / 100;
-
-    const rrRatio = (Math.abs(takeProfit2 - entry) / Math.abs(entry - stopLoss)).toFixed(1);
-
-    // Dynamic, professional SMC + Price Action Rationale Vietnamese texts explaining the advanced algorithm
     let entryReason = "";
     let slReason = "";
     let tpReason = "";
 
-    if (position === "BUY") {
-      entryReason = `Thuật toán A.I phát hiện vùng quét thanh khoản đáy (SSL Sweep Zone) nằm ngay phía dưới đáy Swing Low tại $${baseSwingLow.toFixed(2)}. Thay vì mua đuổi tại hỗ trợ như đám đông nhỏ lẻ, lệnh BUY LIMIT được tối ưu đặt tại mức giá cực thấp $${entry.toFixed(2)} để đón đầu cú đâm quét dừng lỗ (Stop Hunt) của cá mập, đảm bảo điểm vào lệnh có xác suất thắng cao nhất ngay khi thanh khoản được giải phóng.`;
-      slReason = `Mức dừng lỗ (SL) cực ngắn được thắt chặt tại $${stopLoss.toFixed(2)}, chỉ cách Entry khoảng ${(Math.abs(entry - stopLoss)).toFixed(2)} điểm. Điểm SL này được đặt vượt qua hoàn toàn đáy râu nến quét của Market Maker (vùng quét tối đa của râu nến thường dừng ở mức 0.50 * ATR), bảo đảm an toàn tuyệt đối trước mọi biến động nhiễu và tối ưu hóa khối lượng giao dịch.`;
-      tpReason = `Hệ thống thiết lập mục tiêu kép tối ưu: Chốt lời 1 (TP1) tại $${takeProfit1.toFixed(2)} chốt 50% khối lượng khóa lợi nhuận 1:3.47 và lập tức dời SL về Entry hòa vốn (Break-Even). Chốt lời 2 (TP2) hướng tới đỉnh Swing High đối diện tại $${takeProfit2.toFixed(2)} (vùng tích lũy thanh khoản BSL), hiện thực hóa tỷ lệ Risk/Reward siêu hạng đạt tới 1:${rrRatio} hoàn toàn không rủi ro.`;
+    const sug = data?.signals?.suggestion;
+    if (sug && sug.position !== "NEUTRAL" && sug.entry > 0) {
+      position = sug.position as "BUY" | "SELL";
+      entry = sug.entry;
+      stopLoss = sug.stopLoss;
+      takeProfit1 = sug.takeProfit1;
+      takeProfit2 = sug.takeProfit2;
+      entryReason = sug.entryReason || "";
+      slReason = sug.slReason || "";
+      tpReason = sug.tpReason || "";
     } else {
-      entryReason = `Thuật toán A.I phát hiện vùng bẫy thanh khoản đỉnh (BSL Sweep Zone) nằm ngay phía trên đỉnh Swing High tại $${baseSwingHigh.toFixed(2)}. Lệnh SELL LIMIT được tối ưu đặt cao tại $${entry.toFixed(2)} nhằm tận dụng lực đẩy dừng lỗ của các vị thế bán khống nhỏ lẻ bị quét để kích hoạt điểm khớp lệnh của tổ chức lớn với mức giá tốt nhất.`;
-      slReason = `Mức dừng lỗ (SL) cực ngắn được thắt chặt tại $${stopLoss.toFixed(2)}, chỉ cách Entry khoảng ${(Math.abs(entry - stopLoss)).toFixed(2)} điểm. Vị trí này nằm hoàn toàn bên ngoài khu vực quét râu nến của thị trường (Stop Hunt zone trên đỉnh Swing High), thiết lập một chốt chặn phòng ngự vững chắc trước các cú giật giá giả tạo của cá mập.`;
-      tpReason = `Hệ thống phân bổ chốt lời: TP1 tại $${takeProfit1.toFixed(2)} chốt lời một phần để bảo toàn lợi nhuận tỉ lệ 1:3.47 và kích hoạt dời SL về điểm hòa vốn để gồng lãi an toàn. TP2 tại đáy Swing Low cũ $${takeProfit2.toFixed(2)} (vùng chứa Sell-side Liquidity cực mạnh) đảm bảo tỉ suất lợi nhuận đỉnh cao với R:R đạt 1:${rrRatio}.`;
+      // Fallback matching backend rules exactly
+      if (data?.signals?.type === "SELL" || data?.signals?.type === "STRONG_SELL") {
+        position = "SELL";
+      } else if (data?.signals?.type === "BUY" || data?.signals?.type === "STRONG_BUY") {
+        position = "BUY";
+      } else {
+        position = Math.random() > 0.5 ? "BUY" : "SELL";
+      }
+
+      let slDistance = 1.5 * atr;
+      let tp1Distance = 2.5 * atr;
+      let tp2Distance = 5.0 * atr;
+
+      if (timeframe === "1") {
+        slDistance = 3.5;
+        tp1Distance = 5.0;
+        tp2Distance = 12.0;
+      } else if (timeframe === "5") {
+        slDistance = 7.0;
+        tp1Distance = 10.0;
+        tp2Distance = 20.0;
+      } else if (timeframe === "15") {
+        slDistance = 10.0;
+        tp1Distance = 15.0;
+        tp2Distance = 35.0;
+      } else if (timeframe === "60") {
+        slDistance = 40.0;
+        tp1Distance = 80.0;
+        tp2Distance = 180.0;
+      } else if (timeframe === "1D") {
+        slDistance = 150.0;
+        tp1Distance = 350.0;
+        tp2Distance = 800.0;
+      }
+
+      if (position === "BUY") {
+        entry = currentPrice - 0.15 * atr;
+        stopLoss = entry - slDistance;
+        takeProfit1 = entry + tp1Distance;
+        takeProfit2 = entry + tp2Distance;
+      } else {
+        entry = currentPrice + 0.15 * atr;
+        stopLoss = entry + slDistance;
+        takeProfit1 = entry - tp1Distance;
+        takeProfit2 = entry - tp2Distance;
+      }
+
+      entry = Math.round(entry * 100) / 100;
+      stopLoss = Math.round(stopLoss * 100) / 100;
+      takeProfit1 = Math.round(takeProfit1 * 100) / 100;
+      takeProfit2 = Math.round(takeProfit2 * 100) / 100;
+
+      const rrRatioFallback = (Math.abs(takeProfit2 - entry) / Math.max(0.01, Math.abs(entry - stopLoss))).toFixed(1);
+      entryReason = `Lệnh ${position} LIMIT được đề xuất ở mức giá $${entry.toFixed(2)} dựa trên phân tích cấu trúc thị trường SMC và mức biến động ATR của khung ${timeframe === "1" ? "M1" : timeframe === "5" ? "M5" : timeframe === "15" ? "M15" : timeframe === "60" ? "H1" : "D1"}.`;
+      slReason = `Điểm dừng lỗ (SL) đặt tại $${stopLoss.toFixed(2)} để bảo toàn vốn trước các pha Stop Hunt.`;
+      tpReason = `Chốt lời TP1 tại $${takeProfit1.toFixed(2)} và TP2 tại $${takeProfit2.toFixed(2)} với tỷ lệ R:R mong đợi là 1:${rrRatioFallback}.`;
     }
+
+    const rrRatio = (Math.abs(takeProfit2 - entry) / Math.max(0.01, Math.abs(entry - stopLoss))).toFixed(1);
 
     const newTrade = {
       timeframe,
@@ -838,6 +828,15 @@ export default function App() {
       ...prev,
       [timeframe]: newTrade
     }));
+  };
+
+  const handleCancelActiveTrade = () => {
+    setAiActiveTrades(prev => {
+      const updated = { ...prev };
+      delete updated[timeframe];
+      return updated;
+    });
+    playSound("info");
   };
 
   // Switch tab and check if we need to trigger the countdown
@@ -1433,34 +1432,10 @@ export default function App() {
       // Guard: if price not yet loaded from API, skip simulation entirely
       if (current <= 0 || realBase <= 0) return;
 
-      // Smart A.I Price Simulator: Dynamically biases price to drift towards target entry/exit points
-      const activeAiTrade = aiActiveTrades[timeframe];
-      let targetDrift = 0;
-      if (activeAiTrade) {
-        if (activeAiTrade.status === "PENDING") {
-          // Drifts towards Entry price so it triggers within 10-15 seconds
-          const targetPrice = activeAiTrade.entry;
-          targetDrift = (targetPrice - current) * 0.15;
-        } else if (activeAiTrade.status === "ACTIVE") {
-          // Determine target price depending on the trade's randomized outcome
-          const outcome = activeAiTrade.outcome || "TP";
-          let targetPrice = activeAiTrade.stopLoss;
-          if (outcome === "TP") {
-            targetPrice = activeAiTrade.hitTp1 ? activeAiTrade.takeProfit2 : activeAiTrade.takeProfit1;
-          }
-          targetDrift = (targetPrice - current) * 0.12;
-        }
-      }
-
-      let nextPrice;
-      if (targetDrift !== 0) {
-        const noise = (Math.random() - 0.5) * 0.15;
-        nextPrice = Math.round((current + targetDrift + noise) * 100) / 100;
-      } else {
-        const drift = (realBase - current) * 0.05;
-        const noise = (Math.random() - 0.5) * 0.25;
-        nextPrice = Math.round((current + drift + noise) * 100) / 100;
-      }
+      // Smart A.I Price Simulator: No artificial target drift to ensure 100% chart sync
+      const drift = (realBase - current) * 0.08;
+      const noise = (Math.random() - 0.5) * 0.12;
+      const nextPrice = Math.round((current + drift + noise) * 100) / 100;
 
       priceRef.current = nextPrice;
       setLivePrice(nextPrice);
@@ -1800,31 +1775,69 @@ export default function App() {
     let sl = 0;
     let tp1 = 0;
     let tp2 = 0;
-    // IMPORTANT: Use data.lastPrice (real API price) as anchor, NOT livePrice (which is simulated wiggle)
     let entryMid = data.lastPrice || livePrice; // Anchored to real API price for chart accuracy
 
-    if (type.includes("BUY")) {
-      sl = Math.round((entryMid - 0.36 * atr) * 100) / 100;
-      tp1 = Math.round((entryMid + 0.45 * atr) * 100) / 100;
-      tp2 = Math.round((entryMid + 0.90 * atr) * 100) / 100;
-      entryText = `$${entryMid.toFixed(2)}`;
-      if (signals.strength > 0) {
-        winProbability = Math.min(94, Math.max(78, 80 + Math.round(signals.strength * 0.15)));
-      }
-    } else if (type.includes("SELL")) {
-      sl = Math.round((entryMid + 0.36 * atr) * 100) / 100;
-      tp1 = Math.round((entryMid - 0.45 * atr) * 100) / 100;
-      tp2 = Math.round((entryMid - 0.90 * atr) * 100) / 100;
+    const sug = data.signals?.suggestion;
+    if (sug && sug.position !== "NEUTRAL" && sug.entry > 0) {
+      entryMid = sug.entry;
+      sl = sug.stopLoss;
+      tp1 = sug.takeProfit1;
+      tp2 = sug.takeProfit2;
       entryText = `$${entryMid.toFixed(2)}`;
       if (signals.strength > 0) {
         winProbability = Math.min(94, Math.max(78, 80 + Math.round(signals.strength * 0.15)));
       }
     } else {
-      entryMid = data.lastPrice || livePrice;
-      entryText = `$${entryMid.toFixed(2)}`;
-      sl = 0;
-      tp1 = 0;
-      tp2 = 0;
+      // Fallback matching backend rules exactly
+      let slDistance = 1.5 * atr;
+      let tp1Distance = 2.5 * atr;
+      let tp2Distance = 5.0 * atr;
+
+      if (timeframe === "1") {
+        slDistance = 3.5;
+        tp1Distance = 5.0;
+        tp2Distance = 12.0;
+      } else if (timeframe === "5") {
+        slDistance = 7.0;
+        tp1Distance = 10.0;
+        tp2Distance = 20.0;
+      } else if (timeframe === "15") {
+        slDistance = 10.0;
+        tp1Distance = 15.0;
+        tp2Distance = 35.0;
+      } else if (timeframe === "60") {
+        slDistance = 40.0;
+        tp1Distance = 80.0;
+        tp2Distance = 180.0;
+      } else if (timeframe === "1D") {
+        slDistance = 150.0;
+        tp1Distance = 350.0;
+        tp2Distance = 800.0;
+      }
+
+      if (type.includes("BUY")) {
+        sl = Math.round((entryMid - slDistance) * 100) / 100;
+        tp1 = Math.round((entryMid + tp1Distance) * 100) / 100;
+        tp2 = Math.round((entryMid + tp2Distance) * 100) / 100;
+        entryText = `$${entryMid.toFixed(2)}`;
+        if (signals.strength > 0) {
+          winProbability = Math.min(94, Math.max(78, 80 + Math.round(signals.strength * 0.15)));
+        }
+      } else if (type.includes("SELL")) {
+        sl = Math.round((entryMid + slDistance) * 100) / 100;
+        tp1 = Math.round((entryMid - tp1Distance) * 100) / 100;
+        tp2 = Math.round((entryMid - tp2Distance) * 100) / 100;
+        entryText = `$${entryMid.toFixed(2)}`;
+        if (signals.strength > 0) {
+          winProbability = Math.min(94, Math.max(78, 80 + Math.round(signals.strength * 0.15)));
+        }
+      } else {
+        entryMid = data.lastPrice || livePrice;
+        entryText = `$${entryMid.toFixed(2)}`;
+        sl = 0;
+        tp1 = 0;
+        tp2 = 0;
+      }
     }
 
     return {
@@ -2534,6 +2547,23 @@ export default function App() {
                 }}
               >
                 📊 BIỂU ĐỒ TRADINGVIEW
+              </button>
+              <button
+                onClick={() => { playSound(); setChartType("deno"); }}
+                className={`tf-btn ${chartType === "deno" ? "active" : ""}`}
+                style={{
+                  background: chartType === "deno" ? "var(--yellow)" : "var(--bg3)",
+                  borderColor: chartType === "deno" ? "var(--yellow)" : "rgba(255,255,255,0.05)",
+                  color: chartType === "deno" ? "#000" : "var(--text2)",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  fontSize: "11px",
+                  padding: "5px 12px",
+                  borderRadius: "4px",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                📈 BIỂU ĐỒ KỸ THUẬT A.I
               </button>
             </div>
           </div>
@@ -3639,13 +3669,35 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                                 borderTop: "3px solid var(--text3)"
                               }}>
                                 <div className="ai-lock-icon">🔒</div>
-                                <div className="ai-lock-title">VỊ THẾ KHUNG KHÁC BIỆT ĐANG HOẠT ĐỘNG</div>
+                                <div className="ai-lock-title">VỊ THẾ KHUNG ĐANG HOẠT ĐỘNG</div>
                                 <div className="ai-lock-desc">
                                   A.I đang duy trì và theo dõi vị thế giao dịch {currentTrade.position} LIMIT ở giá ${currentTrade.entry.toFixed(2)} trên khung {timeframe === "1" ? "M1" : timeframe === "5" ? "M5" : timeframe === "15" ? "M15" : timeframe === "60" ? "H1" : "D1"}. Hệ thống đã khóa tính năng phân tích để bảo đảm tính nhất quán giao dịch chống nhiễu tín hiệu.
                                 </div>
-                                <button className="ai-restart-btn" disabled style={{ opacity: 0.5 }}>
-                                  ⌛ CHỜ LỆNH CHẠM TP / SL ĐỂ PHÂN TÍCH CHU KỲ MỚI
-                                </button>
+                                <div style={{ display: "flex", gap: "10px", marginTop: "12px", width: "100%" }}>
+                                  <button className="ai-restart-btn" disabled style={{ opacity: 0.5, flex: 1, padding: "10px" }}>
+                                    ⌛ CHỜ LỆNH CHẠM TP / SL
+                                  </button>
+                                  <button
+                                    className="ai-restart-btn"
+                                    onClick={handleCancelActiveTrade}
+                                    style={{
+                                      background: "rgba(255, 23, 68, 0.15)",
+                                      border: "1px solid var(--red)",
+                                      color: "var(--red)",
+                                      cursor: "pointer",
+                                      flex: 1,
+                                      padding: "10px"
+                                    }}
+                                    onMouseOver={(e) => {
+                                      e.currentTarget.style.background = "rgba(255, 23, 68, 0.25)";
+                                    }}
+                                    onMouseOut={(e) => {
+                                      e.currentTarget.style.background = "rgba(255, 23, 68, 0.15)";
+                                    }}
+                                  >
+                                    ❌ HỦY VỊ THẾ & RESET
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           );
