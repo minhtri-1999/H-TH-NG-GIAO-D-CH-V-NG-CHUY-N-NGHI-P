@@ -355,111 +355,111 @@ async function fetchBaseGoldRealtime(): Promise<TradingViewRealtime> {
 
   let success = false;
 
-  // TIER 1: Try Yahoo Finance
+  // TIER 1: Try TradingView CFD Scanner (Unblocked, real-time FOREXCOM:XAUUSD spot gold price & rich indicators)
   try {
-    const url = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d";
-    const resp = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      }
+    const tvUrl = "https://scanner.tradingview.com/cfd/scan";
+    const tvResp = await fetch(tvUrl, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      },
+      body: JSON.stringify({
+        symbols: { tickers: ["FOREXCOM:XAUUSD"] },
+        columns: [
+          "close", "change", "high", "low",
+          "RSI", "MACD.macd", "MACD.signal", "ATR",
+          "EMA10", "SMA20", "EMA20", "EMA50", "EMA100", "EMA200",
+          "ADX", "CCI20", "Stoch.K", "Stoch.D"
+        ]
+      })
     });
-    if (resp.ok) {
-      const data = await resp.json();
-      const result = data.chart?.result?.[0];
-      const quote = result?.indicators?.quote?.[0];
-      const closeList = quote?.close || [];
-      const highList = quote?.high || [];
-      const lowList = quote?.low || [];
-      
-      const validCloses = closeList.filter((c: any) => c !== null && !isNaN(c));
-      const validHighs = highList.filter((h: any) => h !== null && !isNaN(h));
-      const validLows = lowList.filter((l: any) => l !== null && !isNaN(l));
-      
-      if (validCloses.length > 0) {
-        const latestPrice = validCloses[validCloses.length - 1];
-        price = Math.round(latestPrice * 100) / 100;
+
+    if (tvResp.ok) {
+      const tvData = await tvResp.json();
+      const row = tvData.data?.[0]?.d;
+      if (row && row.length >= 4) {
+        price = Math.round((row[0] ?? price) * 100) / 100;
+        change = Number((row[1] ?? change).toFixed(3));
+        high = Math.round((row[2] ?? high) * 100) / 100;
+        low = Math.round((row[3] ?? low) * 100) / 100;
         
-        if (validHighs.length > 0) {
-          high = Math.round(Math.max(...validHighs) * 100) / 100;
-        } else {
-          high = price;
-        }
-        if (validLows.length > 0) {
-          low = Math.round(Math.min(...validLows) * 100) / 100;
-        } else {
-          low = price;
-        }
+        if (row[4] !== null && !isNaN(row[4])) rsi = row[4];
+        if (row[5] !== null && !isNaN(row[5])) macd = row[5];
+        if (row[6] !== null && !isNaN(row[6])) macdSignal = row[6];
+        if (row[7] !== null && !isNaN(row[7])) atr = row[7];
         
-        const prevClose = result?.meta?.previousClose || latestPrice;
-        change = Number((((price - prevClose) / prevClose) * 100).toFixed(3));
+        if (row[8] !== null && !isNaN(row[8])) ema10 = Math.round(row[8] * 100) / 100;
+        if (row[9] !== null && !isNaN(row[9])) sma20 = Math.round(row[9] * 100) / 100;
+        if (row[10] !== null && !isNaN(row[10])) ema20 = Math.round(row[10] * 100) / 100;
+        if (row[11] !== null && !isNaN(row[11])) ema50 = Math.round(row[11] * 100) / 100;
+        if (row[12] !== null && !isNaN(row[12])) ema100 = Math.round(row[12] * 100) / 100;
+        if (row[13] !== null && !isNaN(row[13])) ema200 = Math.round(row[13] * 100) / 100;
         
+        if (row[14] !== null && !isNaN(row[14])) adx = row[14];
+        if (row[15] !== null && !isNaN(row[15])) cci20 = row[15];
+        if (row[16] !== null && !isNaN(row[16])) stochK = row[16];
+        if (row[17] !== null && !isNaN(row[17])) stochD = row[17];
+
         lastKnownGoldPrice = price;
         success = true;
-        console.log(`[Yahoo Real-time Price Engine] Fetched XAUUSD=X price: ${price} USD (change: ${change}%)`);
+        console.log(`[TradingView Real-time Engine] Successfully fetched FOREXCOM:XAUUSD price: ${price} USD (change: ${change}%)`);
       }
     } else {
-      console.warn(`[Yahoo Real-time] Returned HTTP ${resp.status}. Falling back to TradingView...`);
+      console.warn(`[TradingView Real-time] Returned HTTP ${tvResp.status}. Falling back to Yahoo Finance...`);
     }
-  } catch (err: any) {
-    console.warn("[Yahoo Real-time Error] Failed to fetch. Falling back to TradingView. Error:", err.message);
+  } catch (tvErr: any) {
+    console.warn("[TradingView Real-time Error] Failed to fetch. Falling back to Yahoo Finance. Error:", tvErr.message);
   }
 
-  // TIER 2: Fallback to TradingView CFD Scanner (Unblocked & extremely rich with indicators)
+  // TIER 2: Fallback to Yahoo Finance Gold Futures (GC=F)
   if (!success) {
     try {
-      const tvUrl = "https://scanner.tradingview.com/cfd/scan";
-      const tvResp = await fetch(tvUrl, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        },
-        body: JSON.stringify({
-          symbols: { tickers: ["FOREXCOM:XAUUSD"] },
-          columns: [
-            "close", "change", "high", "low",
-            "RSI", "MACD.macd", "MACD.signal", "ATR",
-            "EMA10", "SMA20", "EMA20", "EMA50", "EMA100", "EMA200",
-            "ADX", "CCI20", "Stoch.K", "Stoch.D"
-          ]
-        })
+      const url = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d";
+      const resp = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
       });
-
-      if (tvResp.ok) {
-        const tvData = await tvResp.json();
-        const row = tvData.data?.[0]?.d;
-        if (row && row.length >= 4) {
-          price = Math.round((row[0] ?? price) * 100) / 100;
-          change = Number((row[1] ?? change).toFixed(3));
-          high = Math.round((row[2] ?? high) * 100) / 100;
-          low = Math.round((row[3] ?? low) * 100) / 100;
+      if (resp.ok) {
+        const data = await resp.json();
+        const result = data.chart?.result?.[0];
+        const quote = result?.indicators?.quote?.[0];
+        const closeList = quote?.close || [];
+        const highList = quote?.high || [];
+        const lowList = quote?.low || [];
+        
+        const validCloses = closeList.filter((c: any) => c !== null && !isNaN(c));
+        const validHighs = highList.filter((h: any) => h !== null && !isNaN(h));
+        const validLows = lowList.filter((l: any) => l !== null && !isNaN(l));
+        
+        if (validCloses.length > 0) {
+          const latestPrice = validCloses[validCloses.length - 1];
+          price = Math.round(latestPrice * 100) / 100;
           
-          if (row[4] !== null && !isNaN(row[4])) rsi = row[4];
-          if (row[5] !== null && !isNaN(row[5])) macd = row[5];
-          if (row[6] !== null && !isNaN(row[6])) macdSignal = row[6];
-          if (row[7] !== null && !isNaN(row[7])) atr = row[7];
+          if (validHighs.length > 0) {
+            high = Math.round(Math.max(...validHighs) * 100) / 100;
+          } else {
+            high = price;
+          }
+          if (validLows.length > 0) {
+            low = Math.round(Math.min(...validLows) * 100) / 100;
+          } else {
+            low = price;
+          }
           
-          if (row[8] !== null && !isNaN(row[8])) ema10 = Math.round(row[8] * 100) / 100;
-          if (row[9] !== null && !isNaN(row[9])) sma20 = Math.round(row[9] * 100) / 100;
-          if (row[10] !== null && !isNaN(row[10])) ema20 = Math.round(row[10] * 100) / 100;
-          if (row[11] !== null && !isNaN(row[11])) ema50 = Math.round(row[11] * 100) / 100;
-          if (row[12] !== null && !isNaN(row[12])) ema100 = Math.round(row[12] * 100) / 100;
-          if (row[13] !== null && !isNaN(row[13])) ema200 = Math.round(row[13] * 100) / 100;
+          const prevClose = result?.meta?.previousClose || latestPrice;
+          change = Number((((price - prevClose) / prevClose) * 100).toFixed(3));
           
-          if (row[14] !== null && !isNaN(row[14])) adx = row[14];
-          if (row[15] !== null && !isNaN(row[15])) cci20 = row[15];
-          if (row[16] !== null && !isNaN(row[16])) stochK = row[16];
-          if (row[17] !== null && !isNaN(row[17])) stochD = row[17];
-
           lastKnownGoldPrice = price;
           success = true;
-          console.log(`[TradingView Real-time Engine] Successfully fetched FOREXCOM:XAUUSD price: ${price} USD (change: ${change}%)`);
+          console.log(`[Yahoo Real-time Price Engine] Fetched GC=F price: ${price} USD (change: ${change}%)`);
         }
       } else {
-        console.warn(`[TradingView Real-time] Returned HTTP ${tvResp.status}. Falling back to baseline simulation...`);
+        console.warn(`[Yahoo Real-time] Returned HTTP ${resp.status}. Falling back to baseline simulation...`);
       }
-    } catch (tvErr: any) {
-      console.warn("[TradingView Real-time Error] Failed to fetch. Falling back to baseline simulation. Error:", tvErr.message);
+    } catch (err: any) {
+      console.warn("[Yahoo Real-time Error] Failed to fetch. Falling back to baseline simulation. Error:", err.message);
     }
   }
 

@@ -1,7 +1,7 @@
 // scratch/test_signals_endpoint.ts
 async function test() {
   console.log("--- TESTING DEV SERVER SIGNALS ENDPOINT ---");
-  const url = "http://localhost:8000/api/signals/XAUUSD?tf=15";
+  const url = "http://localhost:8000/api/signals/XAUUSD?tf=5";
   try {
     const resp = await fetch(url);
     if (resp.ok) {
@@ -12,6 +12,7 @@ async function test() {
       console.log("- dayHigh:", data.dayHigh);
       console.log("- dayLow:", data.dayLow);
       console.log("- chart close (last 3):", data.chart.close.slice(-3));
+      console.log("- A.I Suggestion:", JSON.stringify(data.signals.suggestion, null, 2));
     } else {
       console.log("Signals Failed:", resp.status, await resp.text());
     }

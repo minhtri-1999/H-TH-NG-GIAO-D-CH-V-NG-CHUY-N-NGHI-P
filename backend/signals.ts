@@ -531,36 +531,118 @@ export function analyzeSignals(candles: Candle[]): Signal {
   // Format riskReward string
   const riskReward = `1:${(tp1Distance / slDistance).toFixed(1)} -> 1:${(tp2Distance / slDistance).toFixed(1)}`;
 
+  // 1. SWING POINTS DETECTION (Swing High / Swing Low - 5 candle window)
+  const swings: { type: "HIGH" | "LOW"; price: number; index: number }[] = [];
+  const lenCandles = candles.length;
+  for (let i = 2; i < lenCandles - 2; i++) {
+    const prev2 = candles[i - 2];
+    const prev1 = candles[i - 1];
+    const curr = candles[i];
+    const next1 = candles[i + 1];
+    const next2 = candles[i + 2];
+
+    const isSwingHigh =
+      curr.high > prev2.high &&
+      curr.high > prev1.high &&
+      curr.high > next1.high &&
+      curr.high > next2.high;
+
+    const isSwingLow =
+      curr.low < prev2.low &&
+      curr.low < prev1.low &&
+      curr.low < next1.low &&
+      curr.low < next2.low;
+
+    if (isSwingHigh) {
+      swings.push({ index: i, type: "HIGH", price: curr.high });
+    } else if (isSwingLow) {
+      swings.push({ index: i, type: "LOW", price: curr.low });
+    }
+  }
+
+  // 2. LIQUIDITY SWEEPS (Stop hunts)
+  const sweeps: { type: "BSL" | "SSL"; price: number }[] = [];
+  for (let i = 2; i < lenCandles - 1; i++) {
+    const c = candles[i];
+    const recentSwings = swings.filter((s) => s.index < i && s.index >= i - 20);
+    const recentHighs = recentSwings.filter((s) => s.type === "HIGH");
+    const recentLows = recentSwings.filter((s) => s.type === "LOW");
+
+    if (recentHighs.length > 0) {
+      const highestSwing = Math.max(...recentHighs.map((s) => s.price));
+      if (c.high > highestSwing && c.close < highestSwing) {
+        sweeps.push({ type: "BSL", price: highestSwing });
+      }
+    }
+
+    if (recentLows.length > 0) {
+      const lowestSwing = Math.min(...recentLows.map((s) => s.price));
+      if (c.low < lowestSwing && c.close > lowestSwing) {
+        sweeps.push({ type: "SSL", price: lowestSwing });
+      }
+    }
+  }
+
   if (type === "BUY") {
-    // Search for the most recent unmitigated Bullish OB below or close to the stable closed price
+    // Search for the most recent unmitigated Bullish OB that is close but strictly below closedPrice
     const activeOB = [...orderBlocks]
       .reverse()
-      .find(ob => ob.type === "BULLISH" && !ob.mitigated && ob.high <= closedPrice + 2.0 * atrVal);
+      .find(ob => ob.type === "BULLISH" && !ob.mitigated && ob.high <= closedPrice - 0.1 * atrVal && ob.high >= closedPrice - 1.2 * atrVal);
 
-    // Search for the most recent unmitigated Bullish FVG below or close to the stable closed price
+    // Search for the most recent unmitigated Bullish FVG that is close but strictly below closedPrice
     const activeFVG = [...fvgs]
       .reverse()
-      .find(f => f.type === "BULLISH" && !f.mitigated && f.top <= closedPrice + 2.0 * atrVal);
+      .find(f => f.type === "BULLISH" && !f.mitigated && f.top <= closedPrice - 0.1 * atrVal && f.top >= closedPrice - 1.2 * atrVal);
 
-    let entryVal = closedPrice;
+    let entryVal = closedPrice - 0.25 * atrVal;
 
     if (activeOB) {
       entryVal = activeOB.high;
     } else if (activeFVG) {
       entryVal = activeFVG.top;
-    } else {
-      entryVal = closedPrice - 0.15 * atrVal;
     }
 
-    // Protect against outlier entry zones that are too deep (more than 2.5 * ATR away from stable baseline)
-    if (closedPrice - entryVal > 2.5 * atrVal) {
-      entryVal = closedPrice - 0.2 * atrVal;
+    // Clamp the final entry price to ensure it is close to the current price but still a valid pullback limit order
+    const minEntry = closedPrice - 1.2 * atrVal;
+    const maxEntry = closedPrice - 0.15 * atrVal;
+    if (entryVal < minEntry) {
+      entryVal = closedPrice - 0.25 * atrVal;
+    } else if (entryVal > maxEntry) {
+      entryVal = maxEntry;
     }
 
     const entry = Math.round(entryVal * 100) / 100;
-    const stopLoss = Math.round((entry - slDistance) * 100) / 100;
+
+    // Apply Stop-Hunt protection using sweeps and swing points
+    const sslSweep = [...sweeps].reverse().find(s => s.type === "SSL");
+    const lowestSwingLow = [...swings].reverse().filter(s => s.type === "LOW").slice(0, 15).reduce((min, s) => s.price < min ? s.price : min, closedPrice);
+    const lowestOB = [...orderBlocks].reverse().filter(o => o.type === "BULLISH").slice(0, 10).reduce((min, o) => o.low < min ? o.low : min, closedPrice);
+
+    let protectedLevel = Math.min(lowestSwingLow, lowestOB);
+    if (sslSweep && sslSweep.price < protectedLevel) {
+      protectedLevel = sslSweep.price;
+    }
+
+    let stopLossVal = entry - slDistance;
+    if (protectedLevel > 0 && protectedLevel < entry && (entry - protectedLevel) < slDistance * 2.5) {
+      const buffer = timeframeStr === "M1" ? 0.3 : timeframeStr === "M5" ? 0.6 : timeframeStr === "M15" ? 1.0 : 2.5;
+      stopLossVal = protectedLevel - buffer;
+    }
+
+    // Ensure Stop Loss is not too close to Entry (at least 0.6 * slDistance) to avoid instant invalidation
+    if (entry - stopLossVal < 0.6 * slDistance) {
+      stopLossVal = entry - slDistance;
+    }
+    // Also ensure Stop Loss is not too wide (at most 2.0 * slDistance)
+    if (entry - stopLossVal > 2.0 * slDistance) {
+      stopLossVal = entry - 1.5 * slDistance;
+    }
+
+    const stopLoss = Math.round(stopLossVal * 100) / 100;
     const takeProfit1 = Math.round((entry + tp1Distance) * 100) / 100;
     const takeProfit2 = Math.round((entry + tp2Distance) * 100) / 100;
+
+    const actualSlDist = Math.abs(entry - stopLoss);
 
     const obHigh = activeOB ? activeOB.high.toFixed(2) : (minLow + 0.5 * atrVal).toFixed(2);
     const obLow = activeOB ? activeOB.low.toFixed(2) : minLow.toFixed(2);
@@ -568,7 +650,7 @@ export function analyzeSignals(candles: Candle[]): Signal {
 
     const entryReason = `Lệnh MUA được đề xuất ở mức giá $${entry.toFixed(2)} (Khung ${timeframeStr}). Đây là vùng hợp lưu cực đẹp giữa: (1) SMC: Giá điều chỉnh về vùng hỗ trợ của khối lệnh định chế Bullish Order Block (High: $${obHigh} / Low: $${obLow}) ${activeFVG ? `và khoảng trống mất cân bằng cung cầu Bullish FVG (Đáy: $${fvgBottom})` : ""} nhằm quét thanh khoản. (2) Price Action: Phát hiện xung lực rút chân cực tốt (${paEvent}). (3) Mô hình nến: Nến vừa đóng cửa thiết lập mô hình [${detectedPattern}], xác nhận phe Bò (Bullish) đã hoàn toàn làm chủ cuộc chơi và chặn đứng đà rơi của giá tại ngưỡng hỗ trợ quan trọng.`;
 
-    const slReason = `Điểm Cắt lỗ (SL) được thiết lập tại mức giá $${stopLoss.toFixed(2)} (nằm dưới ENTRY đúng $${slDistance.toFixed(2)} giá, được điều chỉnh động dựa trên độ biến động thực tế ATR = $${atrVal.toFixed(2)} nằm chuẩn trong khung giới hạn [${timeframeStr === "M1" ? "3-5" : timeframeStr === "M5" ? "6-8" : timeframeStr === "M15" ? "8-15" : timeframeStr === "H1" ? "30-50" : "ATR-clamped"} giá]). Cài SL tại đây giúp bảo vệ tài khoản an toàn trước các pha săn thanh khoản (Stop Hunt) của nhà cái và đánh dấu mốc vô hiệu hóa cấu trúc tăng giá.`;
+    const slReason = `Điểm Cắt lỗ (SL) được thiết lập tại mức giá $${stopLoss.toFixed(2)} (nằm dưới ENTRY đúng $${actualSlDist.toFixed(2)} giá, được điều chỉnh động dựa trên độ biến động thực tế ATR = $${atrVal.toFixed(2)} nằm chuẩn trong khung giới hạn [${timeframeStr === "M1" ? "3-5" : timeframeStr === "M5" ? "6-8" : timeframeStr === "M15" ? "8-15" : timeframeStr === "H1" ? "30-50" : "ATR-clamped"} giá]). Cài SL tại đây giúp bảo vệ tài khoản an toàn trước các pha săn thanh khoản (Stop Hunt) của nhà cái và đánh dấu mốc vô hiệu hóa cấu trúc tăng giá.`;
 
     const tpReason = `Điểm Chốt lời (TP) được phân bổ theo 2 mục tiêu: TP1 tại $${takeProfit1.toFixed(2)} đạt mức chốt lời tĩnh $${tp1Distance.toFixed(2)} giá (đáp ứng trọn vẹn mục tiêu R:R ngắn hạn). TP2 tại $${takeProfit2.toFixed(2)} hướng tới mục tiêu dài hạn $${tp2Distance.toFixed(2)} giá, nhắm thẳng vào các bể thanh khoản mua (BSL - Buy Side Liquidity) ở các đỉnh yếu hoặc các mức kháng cự cũ gần đỉnh lịch sử gần nhất $${maxHigh.toFixed(2)}.`;
 
@@ -584,35 +666,65 @@ export function analyzeSignals(candles: Candle[]): Signal {
       tpReason,
     };
   } else if (type === "SELL") {
-    // Search for the most recent unmitigated Bearish OB above or close to the stable closed price
+    // Search for the most recent unmitigated Bearish OB that is close but strictly above closedPrice
     const activeOB = [...orderBlocks]
       .reverse()
-      .find(ob => ob.type === "BEARISH" && !ob.mitigated && ob.low >= closedPrice - 2.0 * atrVal);
+      .find(ob => ob.type === "BEARISH" && !ob.mitigated && ob.low >= closedPrice + 0.1 * atrVal && ob.low <= closedPrice + 1.2 * atrVal);
 
-    // Search for the most recent unmitigated Bearish FVG above or close to the stable closed price
+    // Search for the most recent unmitigated Bearish FVG that is close but strictly above closedPrice
     const activeFVG = [...fvgs]
       .reverse()
-      .find(f => f.type === "BEARISH" && !f.mitigated && f.bottom >= closedPrice - 2.0 * atrVal);
+      .find(f => f.type === "BEARISH" && !f.mitigated && f.bottom >= closedPrice + 0.1 * atrVal && f.bottom <= closedPrice + 1.2 * atrVal);
 
-    let entryVal = closedPrice;
+    let entryVal = closedPrice + 0.25 * atrVal;
 
     if (activeOB) {
       entryVal = activeOB.low;
     } else if (activeFVG) {
       entryVal = activeFVG.bottom;
-    } else {
-      entryVal = closedPrice + 0.15 * atrVal;
     }
 
-    // Protect against outlier entry zones that are too deep (more than 2.5 * ATR away from stable baseline)
-    if (entryVal - closedPrice > 2.5 * atrVal) {
-      entryVal = closedPrice + 0.2 * atrVal;
+    // Clamp the final entry price to ensure it is close to the current price but still a valid pullback limit order
+    const minEntry = closedPrice + 0.15 * atrVal;
+    const maxEntry = closedPrice + 1.2 * atrVal;
+    if (entryVal > maxEntry) {
+      entryVal = closedPrice + 0.25 * atrVal;
+    } else if (entryVal < minEntry) {
+      entryVal = minEntry;
     }
 
     const entry = Math.round(entryVal * 100) / 100;
-    const stopLoss = Math.round((entry + slDistance) * 100) / 100;
+
+    // Apply Stop-Hunt protection using sweeps and swing points
+    const bslSweep = [...sweeps].reverse().find(s => s.type === "BSL");
+    const highestSwingHigh = [...swings].reverse().filter(s => s.type === "HIGH").slice(0, 15).reduce((max, s) => s.price > max ? s.price : max, closedPrice);
+    const highestOB = [...orderBlocks].reverse().filter(o => o.type === "BEARISH").slice(0, 10).reduce((max, o) => o.high > max ? o.high : max, closedPrice);
+
+    let protectedLevel = Math.max(highestSwingHigh, highestOB);
+    if (bslSweep && bslSweep.price > protectedLevel) {
+      protectedLevel = bslSweep.price;
+    }
+
+    let stopLossVal = entry + slDistance;
+    if (protectedLevel > 0 && protectedLevel > entry && (protectedLevel - entry) < slDistance * 2.5) {
+      const buffer = timeframeStr === "M1" ? 0.3 : timeframeStr === "M5" ? 0.6 : timeframeStr === "M15" ? 1.0 : 2.5;
+      stopLossVal = protectedLevel + buffer;
+    }
+
+    // Ensure Stop Loss is not too close to Entry (at least 0.6 * slDistance) to avoid instant invalidation
+    if (stopLossVal - entry < 0.6 * slDistance) {
+      stopLossVal = entry + slDistance;
+    }
+    // Also ensure Stop Loss is not too wide (at most 2.0 * slDistance)
+    if (stopLossVal - entry > 2.0 * slDistance) {
+      stopLossVal = entry + 1.5 * slDistance;
+    }
+
+    const stopLoss = Math.round(stopLossVal * 100) / 100;
     const takeProfit1 = Math.round((entry - tp1Distance) * 100) / 100;
     const takeProfit2 = Math.round((entry - tp2Distance) * 100) / 100;
+
+    const actualSlDist = Math.abs(stopLoss - entry);
 
     const obHigh = activeOB ? activeOB.high.toFixed(2) : maxHigh.toFixed(2);
     const obLow = activeOB ? activeOB.low.toFixed(2) : (maxHigh - 0.5 * atrVal).toFixed(2);
@@ -620,7 +732,7 @@ export function analyzeSignals(candles: Candle[]): Signal {
 
     const entryReason = `Lệnh BÁN được kích hoạt ở mức giá $${entry.toFixed(2)} (Khung ${timeframeStr}). Đây là điểm hội tụ kỹ thuật đỉnh cao giữa: (1) SMC: Giá hồi phục tăng điều chỉnh về vùng kháng cự của khối lệnh Bearish Order Block (High: $${obHigh} / Low: $${obLow}) ${activeFVG ? `và vùng mất cân bằng cung cầu Bearish FVG (Đỉnh: $${fvgTop})` : ""} nhằm tái cân bằng cung cầu. (2) Price Action: Phản ánh áp lực bán đè nặng và từ chối giá cao (${paEvent}). (3) Mô hình nến: Sự xuất hiện của mô hình nến đảo chiều [${detectedPattern}] tại vùng Premium kháng cự xác nhận phe Gấu (Bearish) đã quay trở lại áp đảo hoàn toàn lực cầu yếu ớt.`;
 
-    const slReason = `Điểm Cắt lỗ (SL) được định vị tại mức giá $${stopLoss.toFixed(2)} (nằm trên ENTRY đúng $${slDistance.toFixed(2)} giá, được điều chỉnh động dựa trên độ biến động thực tế ATR = $${atrVal.toFixed(2)} nằm chuẩn trong khung giới hạn [${timeframeStr === "M1" ? "3-5" : timeframeStr === "M5" ? "6-8" : timeframeStr === "M15" ? "8-15" : timeframeStr === "H1" ? "30-50" : "ATR-clamped"} giá]). Đây là chốt chặn bảo hiểm tuyệt hảo chống quét râu nến và đánh dấu điểm vô hiệu hóa cấu trúc giảm giá.`;
+    const slReason = `Điểm Cắt lỗ (SL) được định vị tại mức giá $${stopLoss.toFixed(2)} (nằm trên ENTRY đúng $${actualSlDist.toFixed(2)} giá, được điều chỉnh động dựa trên độ biến động thực tế ATR = $${atrVal.toFixed(2)} nằm chuẩn trong khung giới hạn [${timeframeStr === "M1" ? "3-5" : timeframeStr === "M5" ? "6-8" : timeframeStr === "M15" ? "8-15" : timeframeStr === "H1" ? "30-50" : "ATR-clamped"} giá]). Đây là chốt chặn bảo hiểm tuyệt hảo chống quét râu nến và đánh dấu điểm vô hiệu hóa cấu trúc giảm giá.`;
 
     const tpReason = `Điểm Chốt lời (TP) được tối ưu hóa theo 2 chặng: TP1 tại $${takeProfit1.toFixed(2)} là mức chốt lời tĩnh $${tp1Distance.toFixed(2)} giá (giúp khóa lợi nhuận an toàn vùng thanh khoản nội bộ). TP2 tại $${takeProfit2.toFixed(2)} hướng tới mục tiêu dài hạn $${tp2Distance.toFixed(2)} giá, nhắm thẳng vào các bể thanh khoản bán (SSL - Sell Side Liquidity) ở đáy cũ gần nhất $${minLow.toFixed(2)} để gặt hái hiệu suất tối đa.`;
 

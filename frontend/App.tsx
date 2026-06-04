@@ -776,8 +776,35 @@ export default function App() {
     }
 
     if (position === "BUY") {
-      entry = currentPrice - 0.2 * atr;
-      
+      let entryVal = currentPrice - 0.25 * atr;
+
+      // Find unmitigated Bullish OB/FVG that is close but strictly below currentPrice
+      const activeOB = [...orderBlocks]
+        .reverse()
+        .find(ob => ob.type === "BULLISH" && !ob.mitigated && ob.high <= currentPrice - 0.1 * atr && ob.high >= currentPrice - 1.2 * atr);
+
+      const fvgs = data?.advancedAnalysis?.fvgs || [];
+      const activeFVG = [...fvgs]
+        .reverse()
+        .find(f => f.type === "BULLISH" && !f.mitigated && f.top <= currentPrice - 0.1 * atr && f.top >= currentPrice - 1.2 * atr);
+
+      if (activeOB) {
+        entryVal = activeOB.high;
+      } else if (activeFVG) {
+        entryVal = activeFVG.top;
+      }
+
+      // Clamp the final entry price to ensure it is close to the current price
+      const minEntry = currentPrice - 1.2 * atr;
+      const maxEntry = currentPrice - 0.15 * atr;
+      if (entryVal < minEntry) {
+        entryVal = currentPrice - 0.25 * atr;
+      } else if (entryVal > maxEntry) {
+        entryVal = maxEntry;
+      }
+
+      entry = entryVal;
+
       const sslSweep = sweeps.find(s => s.type === "SSL");
       const lowestSwingLow = swings.filter(s => s.type === "LOW").reduce((min, s) => s.price < min ? s.price : min, currentPrice);
       const lowestOB = orderBlocks.filter(o => o.type === "BULLISH").reduce((min, o) => o.low < min ? o.low : min, currentPrice);
@@ -787,16 +814,53 @@ export default function App() {
         protectedLevel = sslSweep.price;
       }
 
+      let stopLossVal = entry - slDistance;
       if (protectedLevel > 0 && protectedLevel < entry && (entry - protectedLevel) < slDistance * 2.5) {
-        stopLoss = protectedLevel - 1.0;
-      } else {
-        stopLoss = entry - slDistance;
+        const buffer = timeframe === "1" ? 0.3 : timeframe === "5" ? 0.6 : timeframe === "15" ? 1.0 : 2.5;
+        stopLossVal = protectedLevel - buffer;
       }
 
+      // Ensure Stop Loss is not too close to Entry (at least 0.6 * slDistance) to avoid instant invalidation
+      if (entry - stopLossVal < 0.6 * slDistance) {
+        stopLossVal = entry - slDistance;
+      }
+      // Also ensure Stop Loss is not too wide (at most 2.0 * slDistance)
+      if (entry - stopLossVal > 2.0 * slDistance) {
+        stopLossVal = entry - 1.5 * slDistance;
+      }
+
+      stopLoss = stopLossVal;
       takeProfit1 = entry + tp1Distance;
       takeProfit2 = entry + tp2Distance;
     } else {
-      entry = currentPrice + 0.2 * atr;
+      let entryVal = currentPrice + 0.25 * atr;
+
+      // Find unmitigated Bearish OB/FVG that is close but strictly above currentPrice
+      const activeOB = [...orderBlocks]
+        .reverse()
+        .find(ob => ob.type === "BEARISH" && !ob.mitigated && ob.low >= currentPrice + 0.1 * atr && ob.low <= currentPrice + 1.2 * atr);
+
+      const fvgs = data?.advancedAnalysis?.fvgs || [];
+      const activeFVG = [...fvgs]
+        .reverse()
+        .find(f => f.type === "BEARISH" && !f.mitigated && f.bottom >= currentPrice + 0.1 * atr && f.bottom <= currentPrice + 1.2 * atr);
+
+      if (activeOB) {
+        entryVal = activeOB.low;
+      } else if (activeFVG) {
+        entryVal = activeFVG.bottom;
+      }
+
+      // Clamp the final entry price to ensure it is close to the current price
+      const minEntry = currentPrice + 0.15 * atr;
+      const maxEntry = currentPrice + 1.2 * atr;
+      if (entryVal > maxEntry) {
+        entryVal = currentPrice + 0.25 * atr;
+      } else if (entryVal < minEntry) {
+        entryVal = minEntry;
+      }
+
+      entry = entryVal;
 
       const bslSweep = sweeps.find(s => s.type === "BSL");
       const highestSwingHigh = swings.filter(s => s.type === "HIGH").reduce((max, s) => s.price > max ? s.price : max, currentPrice);
@@ -807,12 +871,22 @@ export default function App() {
         protectedLevel = bslSweep.price;
       }
 
+      let stopLossVal = entry + slDistance;
       if (protectedLevel > 0 && protectedLevel > entry && (protectedLevel - entry) < slDistance * 2.5) {
-        stopLoss = protectedLevel + 1.0;
-      } else {
-        stopLoss = entry + slDistance;
+        const buffer = timeframe === "1" ? 0.3 : timeframe === "5" ? 0.6 : timeframe === "15" ? 1.0 : 2.5;
+        stopLossVal = protectedLevel + buffer;
       }
 
+      // Ensure Stop Loss is not too close to Entry (at least 0.6 * slDistance) to avoid instant invalidation
+      if (stopLossVal - entry < 0.6 * slDistance) {
+        stopLossVal = entry + slDistance;
+      }
+      // Also ensure Stop Loss is not too wide (at most 2.0 * slDistance)
+      if (stopLossVal - entry > 2.0 * slDistance) {
+        stopLossVal = entry + 1.5 * slDistance;
+      }
+
+      stopLoss = stopLossVal;
       takeProfit1 = entry - tp1Distance;
       takeProfit2 = entry - tp2Distance;
     }
@@ -824,8 +898,10 @@ export default function App() {
 
     const rrRatio = (Math.abs(takeProfit2 - entry) / Math.max(0.01, Math.abs(entry - stopLoss))).toFixed(1);
 
-    const entryReason = `Lệnh ${position} LIMIT được đề xuất ở mức giá $${entry.toFixed(2)} dựa trên phân tích cấu trúc thị trường SMC và mức biến động ATR của khung ${timeframe === "1" ? "M1" : timeframe === "5" ? "M5" : timeframe === "15" ? "M15" : timeframe === "60" ? "H1" : "D1"}.`;
-    const slReason = `Điểm dừng lỗ (SL) đặt tại $${stopLoss.toFixed(2)} bên ngoài các vùng quét thanh khoản (Anti-Stop Hunt) để tránh bẫy dừng lỗ của nhà cái.`;
+    const actualSlDist = Math.abs(entry - stopLoss);
+
+    const entryReason = `Lệnh ${position} LIMIT được đề xuất ở mức giá $${entry.toFixed(2)} dựa trên cấu trúc thị trường SMC và mức biến động ATR của khung ${timeframe === "1" ? "M1" : timeframe === "5" ? "M5" : timeframe === "15" ? "M15" : timeframe === "60" ? "H1" : "D1"}.`;
+    const slReason = `Điểm dừng lỗ (SL) đặt tại $${stopLoss.toFixed(2)} (cách entry đúng $${actualSlDist.toFixed(2)} giá) bên ngoài các vùng quét thanh khoản (Anti-Stop Hunt) để tránh bẫy dừng lỗ của nhà cái.`;
     const tpReason = `Chốt lời TP1 tại $${takeProfit1.toFixed(2)} và TP2 tại $${takeProfit2.toFixed(2)} với tỷ lệ R:R mong đợi là 1:${rrRatio} (TP dài, SL ngắn).`;
 
     const newTrade = {
