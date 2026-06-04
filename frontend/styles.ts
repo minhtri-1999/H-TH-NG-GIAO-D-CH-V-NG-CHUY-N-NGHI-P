@@ -2867,6 +2867,14 @@ body {
     -webkit-overflow-scrolling: touch;
   }
   
+  .hide-on-mobile {
+    display: none !important;
+  }
+  
+  .show-on-mobile-flex {
+    display: flex !important;
+  }
+  
   .sidebar {
     width: 100% !important;
     height: auto !important;
@@ -2946,12 +2954,6 @@ body {
   }
   .brand-name {
     font-size: 13px !important;
-  }
-  .hide-on-mobile {
-    display: none !important;
-  }
-  .show-on-mobile-flex {
-    display: flex !important;
   }
 }
 
