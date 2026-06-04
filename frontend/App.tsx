@@ -2536,6 +2536,38 @@ export default function App() {
               ))}
             </div>
 
+            {/* Timeframe Selector Button Group for Mobile only */}
+            <div className="show-on-mobile-flex" style={{ display: "none", gap: "4px", background: "var(--bg3)", padding: "3px", borderRadius: "6px", border: "1px solid var(--border)", margin: "4px 0" }}>
+              {[
+                { id: "1", name: "M1" },
+                { id: "5", name: "M5" },
+                { id: "15", name: "M15" },
+                { id: "60", name: "1H" },
+                { id: "1D", name: "1D" }
+              ].map((tf) => (
+                <button
+                  key={`mobile-${tf.id}`}
+                  onClick={() => {
+                    playSound();
+                    setTimeframe(tf.id);
+                  }}
+                  style={{
+                    background: timeframe === tf.id ? "var(--yellow)" : "transparent",
+                    border: "none",
+                    borderRadius: "4px",
+                    padding: "4px 8px",
+                    fontSize: "11px",
+                    fontWeight: "bold",
+                    color: timeframe === tf.id ? "#000" : "var(--text2)",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  {tf.name}
+                </button>
+              ))}
+            </div>
+
             {/* Chart Toggle Buttons with gold glassmorphism active styling */}
             <div style={{ display: "flex", gap: "6px", alignItems: "center", marginLeft: "6px" }}>
               <button

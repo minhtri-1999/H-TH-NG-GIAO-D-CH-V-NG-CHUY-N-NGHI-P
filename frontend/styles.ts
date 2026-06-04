@@ -2950,6 +2950,9 @@ body {
   .hide-on-mobile {
     display: none !important;
   }
+  .show-on-mobile-flex {
+    display: flex !important;
+  }
 }
 
 /* PREMIUM A.I ANALYSIS STYLES */
