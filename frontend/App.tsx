@@ -1588,17 +1588,21 @@ export default function App() {
         setSimulatedTrades(prev => [newTrade, ...prev.slice(0, 24)]);
       }
 
-      // 4. Real-time A.I Trade Execution Check
-      if (activeAiTrade) {
-        if (activeAiTrade.status === "PENDING") {
-          const isBuy = activeAiTrade.position === "BUY";
-          const hitEntry = isBuy ? (nextPrice <= activeAiTrade.entry) : (nextPrice >= activeAiTrade.entry);
+      // 4. Real-time A.I Trade Execution Check (runs for all active timeframes)
+      const timeframesToCheck = ["1", "5", "15", "60", "1D"];
+      timeframesToCheck.forEach(tf => {
+        const trade = aiActiveTrades[tf];
+        if (!trade) return;
+
+        if (trade.status === "PENDING") {
+          const isBuy = trade.position === "BUY";
+          const hitEntry = isBuy ? (nextPrice <= trade.entry) : (nextPrice >= trade.entry);
           if (hitEntry) {
             setAiActiveTrades(prev => {
               const updated = { ...prev };
-              if (updated[timeframe] && updated[timeframe].status === "PENDING") {
-                updated[timeframe] = {
-                  ...updated[timeframe],
+              if (updated[tf] && updated[tf].status === "PENDING") {
+                updated[tf] = {
+                  ...updated[tf],
                   status: "ACTIVE",
                   openPrice: nextPrice,
                   openTime: new Date().toLocaleTimeString(),
@@ -1608,12 +1612,12 @@ export default function App() {
             });
             playSound("info");
           }
-        } else if (activeAiTrade.status === "ACTIVE") {
-          const isBuy = activeAiTrade.position === "BUY";
+        } else if (trade.status === "ACTIVE") {
+          const isBuy = trade.position === "BUY";
           
-          const hitTP1 = isBuy ? (nextPrice >= activeAiTrade.takeProfit1) : (nextPrice <= activeAiTrade.takeProfit1);
-          const hitTP2 = isBuy ? (nextPrice >= activeAiTrade.takeProfit2) : (nextPrice <= activeAiTrade.takeProfit2);
-          const hitSL = isBuy ? (nextPrice <= activeAiTrade.stopLoss) : (nextPrice >= activeAiTrade.stopLoss);
+          const hitTP1 = isBuy ? (nextPrice >= trade.takeProfit1) : (nextPrice <= trade.takeProfit1);
+          const hitTP2 = isBuy ? (nextPrice >= trade.takeProfit2) : (nextPrice <= trade.takeProfit2);
+          const hitSL = isBuy ? (nextPrice <= trade.stopLoss) : (nextPrice >= trade.stopLoss);
 
           if (hitTP1 || hitTP2 || hitSL) {
             const finalStatus = (hitTP1 || hitTP2) ? "TP" : "SL";
@@ -1621,25 +1625,25 @@ export default function App() {
 
             let finalPips = 0;
             if (isBuy) {
-              finalPips = Math.round((nextPrice - activeAiTrade.entry) * 10);
+              finalPips = Math.round((nextPrice - trade.entry) * 10);
             } else {
-              finalPips = Math.round((activeAiTrade.entry - nextPrice) * 10);
+              finalPips = Math.round((trade.entry - nextPrice) * 10);
             }
 
             const lotMultiplier = 100;
             let lotSize = 0.1;
-            if (timeframe === "5") lotSize = 0.2;
-            else if (timeframe === "15") lotSize = 0.5;
-            else if (timeframe === "60") lotSize = 1.0;
-            else if (timeframe === "1D") lotSize = 2.0;
+            if (tf === "5") lotSize = 0.2;
+            else if (tf === "15") lotSize = 0.5;
+            else if (tf === "60") lotSize = 1.0;
+            else if (tf === "1D") lotSize = 2.0;
 
             const finalProfitUsd = Number((finalPips * lotMultiplier * lotSize / 10).toFixed(2));
 
             setAiActiveTrades(prev => {
               const updated = { ...prev };
-              if (updated[timeframe] && updated[timeframe].status === "ACTIVE") {
-                updated[timeframe] = {
-                  ...updated[timeframe],
+              if (updated[tf] && updated[tf].status === "ACTIVE") {
+                updated[tf] = {
+                  ...updated[tf],
                   status: finalStatus,
                   closePrice: nextPrice,
                   closeTime: new Date().toLocaleTimeString(),
@@ -1651,13 +1655,13 @@ export default function App() {
             });
 
             const completedTrade = {
-              id: `AI-${timeframe.toUpperCase()}-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
-              timeframe: timeframe === "1" ? "M1" : timeframe === "5" ? "M5" : timeframe === "15" ? "M15" : timeframe === "60" ? "H1" : "D1",
-              position: activeAiTrade.position,
-              entry: activeAiTrade.entry,
-              stopLoss: activeAiTrade.stopLoss,
-              takeProfit1: activeAiTrade.takeProfit1,
-              takeProfit2: activeAiTrade.takeProfit2,
+              id: `AI-${tf.toUpperCase()}-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+              timeframe: tf === "1" ? "M1" : tf === "5" ? "M5" : tf === "15" ? "M15" : tf === "60" ? "H1" : "D1",
+              position: trade.position,
+              entry: trade.entry,
+              stopLoss: trade.stopLoss,
+              takeProfit1: trade.takeProfit1,
+              takeProfit2: trade.takeProfit2,
               status: outcomeStatus,
               openTime: Date.now() - 30000,
               closeTime: Date.now(),
@@ -1682,7 +1686,7 @@ export default function App() {
             }
           }
         }
-      }
+      });
 
     }, 85); // Tick every 85ms for super fast "nến nhảy"
 
