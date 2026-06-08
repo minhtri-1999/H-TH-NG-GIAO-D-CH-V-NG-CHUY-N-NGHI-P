@@ -3456,7 +3456,7 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                 <iframe
                   src="https://sslecal2.investing.com/?ecoTimezone=28&ecoLanguage=52&lang=52&columns=time,currency,importance,event,actual,forecast,previous&features=datepicker,timezone&countryIds=5,72,17,25,32,6,37,43,22,39,35,42,4,36,110,26,12,11,10,38,14&calType=week&timeFrame=today"
                   width="100%"
-                  height="calc(100% + 36px)"
+                  height="calc(100% + 42px)"
                   frameBorder="0"
                   allowTransparency="true"
                   marginWidth={0}
@@ -3465,7 +3465,10 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                     border: "none",
                     filter: "invert(0.92) hue-rotate(180deg) contrast(1.1) brightness(0.95)",
                     background: "transparent",
-                    display: "block"
+                    display: "block",
+                    position: "absolute",
+                    top: "-42px",
+                    left: "0"
                   }}
                 ></iframe>
               </div>
