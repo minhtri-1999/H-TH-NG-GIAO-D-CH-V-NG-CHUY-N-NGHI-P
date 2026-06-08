@@ -950,24 +950,11 @@ export default function App() {
   const [tickerActive, setTickerActive] = useState<boolean>(true);
   const [simulatedTrades, setSimulatedTrades] = useState<SimulatedTrade[]>([]);
   const [orderBook, setOrderBook] = useState<{ bids: OrderBookRow[]; asks: OrderBookRow[] }>({ bids: [], asks: [] });
-  const [activeTab, setActiveTab] = useState<"book" | "history" | "signals">("book");
   const [currentTime, setCurrentTime] = useState<string>("");
   const [lastUpdatedPA, setLastUpdatedPA] = useState<string>("");
 
-  // Premium Features: Sound Alerts, Position Calculator, Signal Log
+  // Premium Features: Sound Alerts
   const [soundEnabled, setSoundEnabled] = useState<boolean>(false);
-  const [calcBalance, setCalcBalance] = useState<number>(100);
-  const [calcRisk, setCalcRisk] = useState<number>(5.0);
-  const [accountType, setAccountType] = useState<"standard" | "mini" | "micro">("micro");
-  const [riskInputMode, setRiskInputMode] = useState<"percent" | "usd">("percent");
-  const [calcRiskUsd, setCalcRiskUsd] = useState<number>(5.0); // Khởi tạo $5 USD như trong hình
-  const [customSlDistance, setCustomSlDistance] = useState<number>(0);
-  const [signalLogs, setSignalLogs] = useState<any[]>([
-    { id: "h1", time: "05:40:12", type: "SELL", entry: 4512.40, stopLoss: 4516.80, tp1: 4504.00, status: "HIT TP1 🟢 (+84 pips)" },
-    { id: "h2", time: "03:15:45", type: "BUY", entry: 4495.20, stopLoss: 4489.50, tp1: 4503.50, status: "HIT TP1 🟢 (+83 pips)" },
-    { id: "h3", time: "01:04:10", type: "SELL", entry: 4520.10, stopLoss: 4525.00, tp1: 4511.00, status: "HIT SL 🔴 (-49 pips)" },
-    { id: "h4", time: "23:12:05", type: "BUY", entry: 4488.50, stopLoss: 4482.00, tp1: 4498.00, status: "HIT TP1 🟢 (+95 pips)" },
-  ]);
   const lastAlertTime = useRef<Record<string, number>>({});
   const [candleCountdown, setCandleCountdown] = useState<string>("");
   const [showTvGuide, setShowTvGuide] = useState<boolean>(true);
@@ -1407,28 +1394,6 @@ export default function App() {
         setLivePrice(Math.round(priceRef.current * 100) / 100);
       }
 
-      // Check if we need to log a new signal
-      if (resData.signals && resData.signals.type !== "NEUTRAL") {
-        setSignalLogs(prev => {
-          const lastLog = prev[0];
-          // Check if this signal type or entry is different to prevent duplicate listings
-          if (!lastLog || lastLog.type !== resData.signals.type || Math.abs(lastLog.entry - resData.signals.suggestion.entry) > 0.5) {
-            const now = new Date();
-            const timeStr = now.toLocaleTimeString("vi-VN");
-            const newLog = {
-              id: Math.random().toString(),
-              time: timeStr,
-              type: resData.signals.type,
-              entry: resData.signals.suggestion.entry,
-              stopLoss: resData.signals.suggestion.stopLoss,
-              tp1: resData.signals.suggestion.takeProfit1,
-              status: "Active 🟡"
-            };
-            return [newLog, ...prev.slice(0, 14)];
-          }
-          return prev;
-        });
-      }
 
       if (!isPolling) {
         generateOrderBook(resData.lastPrice);
@@ -1944,37 +1909,7 @@ export default function App() {
     };
   }, [data, aiActiveTrades, aiTriggered, timeframe, livePrice]);
 
-  // SL distance and lot size computations
-  const calculatedSlDistance = useMemo(() => {
-    if (customSlDistance > 0) return customSlDistance;
-    if (!unifiedSignal || !unifiedSignal.sl) return 0;
-    return Math.abs(unifiedSignal.entryMid - unifiedSignal.sl);
-  }, [customSlDistance, unifiedSignal]);
 
-  // Dynamic risk amount in USD based on input mode (percent or absolute USD)
-  const riskAmount = useMemo(() => {
-    if (riskInputMode === "percent") {
-      return (calcBalance * calcRisk) / 100;
-    } else {
-      return calcRiskUsd;
-    }
-  }, [calcBalance, calcRisk, calcRiskUsd, riskInputMode]);
-
-  // Dynamic risk percentage for display
-  const calculatedRiskPercent = useMemo(() => {
-    if (calcBalance <= 0) return 0;
-    if (riskInputMode === "usd") {
-      return (calcRiskUsd / calcBalance) * 100;
-    } else {
-      return calcRisk;
-    }
-  }, [calcBalance, calcRisk, calcRiskUsd, riskInputMode]);
-
-  const calculatedLotSize = useMemo(() => {
-    if (calculatedSlDistance <= 0) return 0;
-    const contractSize = accountType === "standard" ? 100 : accountType === "mini" ? 10 : 1;
-    return riskAmount / (calculatedSlDistance * contractSize);
-  }, [riskAmount, calculatedSlDistance, accountType]);
 
   // Conic gradient background for circular technical gauge
   const probMeterStyle = useMemo(() => {
