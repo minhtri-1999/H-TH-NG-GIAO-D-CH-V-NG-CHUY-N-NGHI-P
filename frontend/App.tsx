@@ -3468,7 +3468,9 @@ function calculateEMA(candles, length = ${len}, source = "${src}") {
                     display: "block",
                     position: "absolute",
                     top: "-42px",
-                    left: "0"
+                    left: "0",
+                    width: "100%",
+                    height: "calc(100% + 42px)"
                   }}
                 ></iframe>
               </div>
